@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use utoipa::ToSchema;
@@ -11,15 +12,32 @@ pub struct Product {
     pub price_cents: i64,
     pub stock: i64,
     pub product_type: ProductType,
+    #[schema(no_recursion)]
+    pub details: Vec<ProductDetails>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct ProductInput {
     pub name: String,
     pub description: String,
     pub price_cents: i64,
     pub stock: i64,
     pub product_type: ProductType,
+    #[schema(no_recursion)]
+    pub details: Vec<ProductDetailsInput>,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductDetails {
+    pub product_id: Uuid,
+    pub detail_name: String,
+    pub detail_value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductDetailsInput {
+    pub detail_name: String,
+    pub detail_value: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
@@ -61,7 +79,7 @@ pub struct Customer {
     pub email: String,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct CustomerInput {
     pub first_name: String,
     pub last_name: String,
@@ -76,28 +94,29 @@ pub struct Sale {
     pub id: Uuid,
     pub product_id: Uuid,
     pub customer_id: Uuid,
-    pub date_of_sale: String,
+    pub date_of_sale: DateTime<Utc>,
     pub quantity: i64,
     pub discount: i64,
     pub total_cents: i64,
-    pub total_resolved: bool,
+    pub total_resolved: i64, // Amount resolved in cents
     pub note: Option<String>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct SaleInput {
     pub product_id: Uuid,
     pub customer_id: Uuid,
-    pub date_of_sale: String,
+    pub date_of_sale: DateTime<Utc>,
     pub quantity: i64,
     pub discount: i64,
     pub total_cents: i64,
-    pub total_resolved: bool,
+    pub total_resolved: i64, // Amount resolved in cents
     pub note: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct Staff {
+    pub id: Uuid,
     pub first_name: String,
     pub last_name: String,
     pub mobile_number: String,
@@ -107,13 +126,14 @@ pub struct Staff {
     pub password_hash: String,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct StaffInput {
+    pub id: Option<Uuid>,
     pub first_name: String,
     pub last_name: String,
     pub mobile_number: String,
     pub photo_link: String,
     pub staff_id: String,
     pub username: String,
-    pub password: String,
+    pub password: Option<String>,
 }

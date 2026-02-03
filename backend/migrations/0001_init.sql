@@ -7,6 +7,14 @@ CREATE TABLE IF NOT EXISTS products (
     product_type TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS product_details (
+    id TEXT PRIMARY KEY NOT NULL,
+    product_id TEXT NOT NULL,
+    detail_name TEXT NOT NULL,
+    detail_value TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS customers (
     id TEXT PRIMARY KEY,
     first_name TEXT NOT NULL,
@@ -30,7 +38,8 @@ CREATE TABLE IF NOT EXISTS sales (
 );
 
 CREATE TABLE IF NOT EXISTS staff (
-    staff_id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY NOT NULL,
+    staff_id TEXT UNIQUE NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     mobile_number TEXT NOT NULL,
@@ -40,6 +49,7 @@ CREATE TABLE IF NOT EXISTS staff (
 );
 
 INSERT OR IGNORE INTO staff (
+    id,
     staff_id,
     first_name,
     last_name,
@@ -48,6 +58,7 @@ INSERT OR IGNORE INTO staff (
     username,
     password_hash
 ) VALUES (
+    '550e8400-e29b-41d4-a716-446655440000',
     'staff-0001',
     'Default',
     'Admin',

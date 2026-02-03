@@ -17,11 +17,37 @@ Simple Axum-based CRUD API with JWT authentication, SQLite storage, and Swagger 
 
 ## Run
 
+The project is a workspace with two crates: `backend` and `frontend`.
+
+### Backend (Server)
+
+To run the Axum server (which also serves the frontend assets if built):
+
 ```bash
-cargo run
+cargo run --bin backend
 ```
 
 The server starts on `http://127.0.0.1:3000`.
+
+### Frontend (Leptos)
+
+The frontend is a Leptos app that compiles to WASM. To develop with live reloading, run from the **project root**:
+
+1. Install `cargo-leptos`:
+   ```bash
+   cargo install cargo-leptos
+   ```
+
+2. Run watch:
+   ```bash
+   cargo leptos watch
+   ```
+
+3. Or build for production (assets go to `target/site`):
+   ```bash
+   cargo leptos build --release
+   ```
+
 
 ## Authentication
 
@@ -33,7 +59,7 @@ Default staff user seeded by migration:
 Login:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/auth/login \
+curl -X POST http://127.0.0.1:3000/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"password123"}'
 ```
@@ -41,7 +67,7 @@ curl -X POST http://127.0.0.1:3000/auth/login \
 Use the returned token:
 
 ```bash
-curl http://127.0.0.1:3000/products \
+curl http://127.0.0.1:3000/api/products \
   -H 'Authorization: Bearer <token>'
 ```
 

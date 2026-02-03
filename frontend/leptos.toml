@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "fastsales"
+bin-package = "fastsales"
+
+[build]
+output-name = "fastsales"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+assets-dir = "assets"
