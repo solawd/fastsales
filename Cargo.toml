@@ -1,17 +1,32 @@
-[package]
-name = "fastsales"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["frontend", "backend", "shared"]
+resolver = "3"
 
-[dependencies]
-axum = "0.7"
-serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", default-features = false, features = ["alloc"] }
-jsonwebtoken = "9"
-utoipa = { version = "5", features = ["uuid"] }
-utoipa-swagger-ui = { version = "8", features = ["axum"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "uuid", "migrate"] }
-argon2 = "0.5"
-rand_core = { version = "0.6", features = ["getrandom"] }
+[[workspace.metadata.leptos]]
+# properties below are required
+name = "fastsales"
+# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
+output-name = "fastsales"
+# The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
+site-root = "target/site"
+# The site-root relative folder where all compiled output (JS, WASM and CSS) is written
+# Defaults to pkg
+site-pkg-dir = "pkg"
+# [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The css file is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/app.css
+style-file = "frontend/style/main.css"
+# Assets source dir. All files found here will be copied and synchronized to site-root.
+# The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
+assets-dir = "frontend/assets"
+# The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
+site-addr = "127.0.0.1:3000"
+# The port to use for automatic reload monitoring
+reload-port = 3001
+# [Optional] Command to use when running end2end tests. It will run in the background.
+end2end-cmd = "npx playwright test"
+#  The browserless query used for auto-reloading (defaults to "ws://localhost:3001")
+# reload-external-port = 3001
+# The name of the package in the bin to use for the server. THIS IS NEW.
+bin-package = "backend"
+# The name of the package in the workspace to use for the lib.
+lib-package = "frontend"
+lib-features = ["hydrate"]

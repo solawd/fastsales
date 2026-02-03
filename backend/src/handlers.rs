@@ -18,13 +18,14 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::Claims;
-use crate::models::{
-    Customer, CustomerInput, Product, ProductInput, ProductType, Sale, SaleInput, Staff, StaffInput,
+use shared::models::{
+    Customer, CustomerInput, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
+    Sale, SaleInput, Staff, StaffInput,
 };
 
 #[utoipa::path(
     get,
-    path = "/products",
+    path = "/api/products",
     tag = "Products",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List products", body = [Product]))
@@ -39,14 +40,33 @@ pub async fn list_products(State(state): State<AppState>) -> Result<Json<Vec<Pro
 
     let mut products = Vec::with_capacity(rows.len());
     for row in rows {
-        products.push(product_from_row(&row)?);
+        let mut product = product_from_row(&row)?;
+        let details_rows = sqlx::query(
+            "SELECT product_id, detail_name, detail_value FROM product_details WHERE product_id = ?",
+        )
+        .bind(product.id.to_string())
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
+
+        let details: Vec<ProductDetails> = details_rows
+            .into_iter()
+            .map(|row| ProductDetails {
+                product_id: parse_uuid(row.get("product_id")).unwrap_or_default(),
+                detail_name: row.get("detail_name"),
+                detail_value: row.get("detail_value"),
+            })
+            .collect();
+        
+        product.details = details;
+        products.push(product);
     }
     Ok(Json(products))
 }
 
 #[utoipa::path(
     post,
-    path = "/products",
+    path = "/api/products",
     tag = "Products",
     request_body = ProductInput,
     security(("bearer_auth" = [])),
@@ -56,14 +76,23 @@ pub async fn create_product(
     State(state): State<AppState>,
     Json(input): Json<ProductInput>,
 ) -> Result<(StatusCode, Json<Product>), StatusCode> {
+    let product_id = Uuid::new_v4();
     let product = Product {
-        id: Uuid::new_v4(),
+        id: product_id,
         name: input.name,
         description: input.description,
         price_cents: input.price_cents,
         stock: input.stock,
         product_type: input.product_type,
+
+        details: input.details.iter().map(|d| ProductDetails {
+            product_id,
+            detail_name: d.detail_name.clone(),
+            detail_value: d.detail_value.clone(),
+        }).collect(),
     };
+
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
 
     sqlx::query(
         "INSERT INTO products (id, name, description, price_cents, stock, product_type) VALUES (?, ?, ?, ?, ?, ?)",
@@ -74,16 +103,31 @@ pub async fn create_product(
     .bind(product.price_cents)
     .bind(product.stock)
     .bind(product.product_type.as_str())
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(map_db_err)?;
+
+    for detail in input.details {
+        sqlx::query(
+            "INSERT INTO product_details (id, product_id, detail_name, detail_value) VALUES (?, ?, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(product_id.to_string())
+        .bind(&detail.detail_name)
+        .bind(&detail.detail_value)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+    }
+
+    tx.commit().await.map_err(map_db_err)?;
 
     Ok((StatusCode::CREATED, Json(product)))
 }
 
 #[utoipa::path(
     get,
-    path = "/products/{id}",
+    path = "/api/products/{id}",
     tag = "Products",
     params(("id" = String, Path, description = "Product id")),
     security(("bearer_auth" = [])),
@@ -102,12 +146,30 @@ pub async fn get_product(
     .map_err(map_db_err)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    Ok(Json(product_from_row(&row)?))
+    let mut product = product_from_row(&row)?;
+    let details_rows = sqlx::query(
+        "SELECT product_id, detail_name, detail_value FROM product_details WHERE product_id = ?",
+    )
+    .bind(product.id.to_string())
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    product.details = details_rows
+        .into_iter()
+        .map(|row| ProductDetails {
+            product_id: parse_uuid(row.get("product_id")).unwrap_or_default(),
+            detail_name: row.get("detail_name"),
+            detail_value: row.get("detail_value"),
+        })
+        .collect();
+
+    Ok(Json(product))
 }
 
 #[utoipa::path(
     put,
-    path = "/products/{id}",
+    path = "/api/products/{id}",
     tag = "Products",
     params(("id" = String, Path, description = "Product id")),
     request_body = ProductInput,
@@ -126,7 +188,14 @@ pub async fn update_product(
         price_cents: input.price_cents,
         stock: input.stock,
         product_type: input.product_type,
+        details: input.details.iter().map(|d| ProductDetails {
+            product_id: id,
+            detail_name: d.detail_name.clone(),
+            detail_value: d.detail_value.clone(),
+        }).collect(),
     };
+
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
 
     let result = sqlx::query(
         "UPDATE products SET name = ?, description = ?, price_cents = ?, stock = ?, product_type = ? WHERE id = ?",
@@ -137,7 +206,7 @@ pub async fn update_product(
     .bind(product.stock)
     .bind(product.product_type.as_str())
     .bind(product.id.to_string())
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(map_db_err)?;
 
@@ -145,12 +214,34 @@ pub async fn update_product(
         return Err(StatusCode::NOT_FOUND);
     }
 
+    // Replace details
+    sqlx::query("DELETE FROM product_details WHERE product_id = ?")
+        .bind(product.id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+
+    for detail in input.details {
+        sqlx::query(
+            "INSERT INTO product_details (id, product_id, detail_name, detail_value) VALUES (?, ?, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(product.id.to_string())
+        .bind(&detail.detail_name)
+        .bind(&detail.detail_value)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+    }
+
+    tx.commit().await.map_err(map_db_err)?;
+
     Ok(Json(product))
 }
 
 #[utoipa::path(
     delete,
-    path = "/products/{id}",
+    path = "/api/products/{id}",
     tag = "Products",
     params(("id" = String, Path, description = "Product id")),
     security(("bearer_auth" = [])),
@@ -175,7 +266,7 @@ pub async fn delete_product(
 
 #[utoipa::path(
     get,
-    path = "/customers",
+    path = "/api/customers",
     tag = "Customers",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List customers", body = [Customer]))
@@ -197,7 +288,7 @@ pub async fn list_customers(State(state): State<AppState>) -> Result<Json<Vec<Cu
 
 #[utoipa::path(
     post,
-    path = "/customers",
+    path = "/api/customers",
     tag = "Customers",
     request_body = CustomerInput,
     security(("bearer_auth" = [])),
@@ -240,7 +331,7 @@ pub async fn create_customer(
 
 #[utoipa::path(
     get,
-    path = "/customers/{id}",
+    path = "/api/customers/{id}",
     tag = "Customers",
     params(("id" = String, Path, description = "Customer id")),
     security(("bearer_auth" = [])),
@@ -264,7 +355,7 @@ pub async fn get_customer(
 
 #[utoipa::path(
     put,
-    path = "/customers/{id}",
+    path = "/api/customers/{id}",
     tag = "Customers",
     params(("id" = String, Path, description = "Customer id")),
     request_body = CustomerInput,
@@ -313,7 +404,7 @@ pub async fn update_customer(
 
 #[utoipa::path(
     delete,
-    path = "/customers/{id}",
+    path = "/api/customers/{id}",
     tag = "Customers",
     params(("id" = String, Path, description = "Customer id")),
     security(("bearer_auth" = [])),
@@ -338,7 +429,7 @@ pub async fn delete_customer(
 
 #[utoipa::path(
     get,
-    path = "/sales",
+    path = "/api/sales",
     tag = "Sales",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List sales", body = [Sale]))
@@ -360,7 +451,7 @@ pub async fn list_sales(State(state): State<AppState>) -> Result<Json<Vec<Sale>>
 
 #[utoipa::path(
     post,
-    path = "/sales",
+    path = "/api/sales",
     tag = "Sales",
     request_body = SaleInput,
     security(("bearer_auth" = [])),
@@ -392,7 +483,7 @@ pub async fn create_sale(
     .bind(sale.quantity)
     .bind(sale.discount)
     .bind(sale.total_cents)
-    .bind(if sale.total_resolved { 1 } else { 0 })
+    .bind(sale.total_resolved)
     .bind(&sale.note)
     .execute(&state.db)
     .await
@@ -403,7 +494,7 @@ pub async fn create_sale(
 
 #[utoipa::path(
     get,
-    path = "/sales/{id}",
+    path = "/api/sales/{id}",
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     security(("bearer_auth" = [])),
@@ -427,7 +518,7 @@ pub async fn get_sale(
 
 #[utoipa::path(
     put,
-    path = "/sales/{id}",
+    path = "/api/sales/{id}",
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     request_body = SaleInput,
@@ -460,7 +551,7 @@ pub async fn update_sale(
     .bind(sale.quantity)
     .bind(sale.discount)
     .bind(sale.total_cents)
-    .bind(if sale.total_resolved { 1 } else { 0 })
+    .bind(sale.total_resolved)
     .bind(&sale.note)
     .bind(sale.id.to_string())
     .execute(&state.db)
@@ -476,7 +567,7 @@ pub async fn update_sale(
 
 #[utoipa::path(
     delete,
-    path = "/sales/{id}",
+    path = "/api/sales/{id}",
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     security(("bearer_auth" = [])),
@@ -518,7 +609,7 @@ pub struct AuthResponse {
 
 #[utoipa::path(
     post,
-    path = "/auth/login",
+    path = "/api/auth/login",
     tag = "Auth",
     request_body = AuthRequest,
     security(()),
@@ -565,29 +656,23 @@ pub async fn login(
 
 #[utoipa::path(
     get,
-    path = "/staff",
+    path = "/api/staff",
     tag = "Staff",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List staff", body = [Staff]))
 )]
 pub async fn list_staff(State(state): State<AppState>) -> Result<Json<Vec<Staff>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT staff_id, first_name, last_name, mobile_number, photo_link, username, password_hash FROM staff",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(map_db_err)?;
-
-    let mut staff = Vec::with_capacity(rows.len());
-    for row in rows {
-        staff.push(staff_from_row(&row));
-    }
+    let staff = sqlx::query("SELECT * FROM staff")
+        .map(|row: SqliteRow| staff_from_row(&row))
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
     Ok(Json(staff))
 }
 
 #[utoipa::path(
     post,
-    path = "/staff",
+    path = "/api/staff",
     tag = "Staff",
     request_body = StaffInput,
     security(("bearer_auth" = [])),
@@ -597,20 +682,24 @@ pub async fn create_staff(
     State(state): State<AppState>,
     Json(input): Json<StaffInput>,
 ) -> Result<(StatusCode, Json<Staff>), StatusCode> {
-    let password_hash = hash_password(&input.password, &state.password_pepper)?;
+    let password = input.password.ok_or(StatusCode::BAD_REQUEST)?;
+    let password_hash = hash_password(&password, &state.password_pepper)?;
+    
     let staff = Staff {
+        id: Uuid::new_v4(),
+        staff_id: input.staff_id,
         first_name: input.first_name,
         last_name: input.last_name,
         mobile_number: input.mobile_number,
         photo_link: input.photo_link,
-        staff_id: input.staff_id,
         username: input.username,
         password_hash,
     };
 
     sqlx::query(
-        "INSERT INTO staff (staff_id, first_name, last_name, mobile_number, photo_link, username, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO staff (id, staff_id, first_name, last_name, mobile_number, photo_link, username, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
+    .bind(staff.id.to_string())
     .bind(&staff.staff_id)
     .bind(&staff.first_name)
     .bind(&staff.last_name)
@@ -627,119 +716,108 @@ pub async fn create_staff(
 
 #[utoipa::path(
     get,
-    path = "/staff/{staff_id}",
+    path = "/api/staff/{id}",
     tag = "Staff",
-    params(("staff_id" = String, Path, description = "Staff id")),
+    params(("id" = String, Path, description = "Staff UUID")),
     security(("bearer_auth" = [])),
     responses((status = 200, description = "Get staff", body = Staff), (status = 404))
 )]
 pub async fn get_staff(
     State(state): State<AppState>,
-    Path(staff_id): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<Staff>, StatusCode> {
-    let row = sqlx::query(
-        "SELECT staff_id, first_name, last_name, mobile_number, photo_link, username, password_hash FROM staff WHERE staff_id = ?",
-    )
-    .bind(&staff_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(map_db_err)?
-    .ok_or(StatusCode::NOT_FOUND)?;
-
-    Ok(Json(staff_from_row(&row)))
-}
-
-#[utoipa::path(
-    put,
-    path = "/staff/{staff_id}",
-    tag = "Staff",
-    params(("staff_id" = String, Path, description = "Staff id")),
-    request_body = StaffInput,
-    security(("bearer_auth" = [])),
-    responses((status = 200, description = "Staff updated", body = Staff), (status = 404))
-)]
-pub async fn update_staff(
-    State(state): State<AppState>,
-    Path(staff_id): Path<String>,
-    Json(input): Json<StaffInput>,
-) -> Result<Json<Staff>, StatusCode> {
-    let password_hash = hash_password(&input.password, &state.password_pepper)?;
-    let staff = Staff {
-        first_name: input.first_name,
-        last_name: input.last_name,
-        mobile_number: input.mobile_number,
-        photo_link: input.photo_link,
-        staff_id: input.staff_id,
-        username: input.username,
-        password_hash,
-    };
-
-    let mut tx = state.db.begin().await.map_err(map_db_err)?;
-
-    let exists = sqlx::query("SELECT staff_id FROM staff WHERE staff_id = ?")
-        .bind(&staff_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(map_db_err)?
-        .is_some();
-    if !exists {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    if staff.staff_id == staff_id {
-        sqlx::query(
-            "UPDATE staff SET first_name = ?, last_name = ?, mobile_number = ?, photo_link = ?, username = ?, password_hash = ? WHERE staff_id = ?",
-        )
-        .bind(&staff.first_name)
-        .bind(&staff.last_name)
-        .bind(&staff.mobile_number)
-        .bind(&staff.photo_link)
-        .bind(&staff.username)
-        .bind(&staff.password_hash)
-        .bind(&staff_id)
-        .execute(&mut *tx)
+    let staff_uuid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let staff = sqlx::query("SELECT * FROM staff WHERE id = ?")
+        .bind(staff_uuid.to_string())
+        .map(|row: SqliteRow| staff_from_row(&row))
+        .fetch_one(&state.db)
         .await
         .map_err(map_db_err)?;
-    } else {
-        sqlx::query("DELETE FROM staff WHERE staff_id = ?")
-            .bind(&staff_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(map_db_err)?;
-        sqlx::query(
-            "INSERT INTO staff (staff_id, first_name, last_name, mobile_number, photo_link, username, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&staff.staff_id)
-        .bind(&staff.first_name)
-        .bind(&staff.last_name)
-        .bind(&staff.mobile_number)
-        .bind(&staff.photo_link)
-        .bind(&staff.username)
-        .bind(&staff.password_hash)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_db_err)?;
-    }
-
-    tx.commit().await.map_err(map_db_err)?;
-
     Ok(Json(staff))
 }
 
 #[utoipa::path(
-    delete,
-    path = "/staff/{staff_id}",
+    put,
+    path = "/api/staff/{id}",
     tag = "Staff",
-    params(("staff_id" = String, Path, description = "Staff id")),
+    params(("id" = String, Path, description = "Staff UUID")),
+    security(("bearer_auth" = [])),
+    request_body = StaffInput,
+    responses((status = 200, description = "Update staff", body = Staff), (status = 404))
+)]
+pub async fn update_staff(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<StaffInput>,
+) -> Result<Json<Staff>, StatusCode> {
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
+    let staff_uuid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Retrieve existing staff to keep password if not updated
+    let existing_staff = sqlx::query("SELECT * FROM staff WHERE id = ?")
+        .bind(staff_uuid.to_string())
+        .map(|row: SqliteRow| staff_from_row(&row))
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+
+    // Handle password update
+    let password_hash = if let Some(pwd) = input.password {
+        if !pwd.is_empty() {
+             hash_password(&pwd, &state.password_pepper)?
+        } else {
+             existing_staff.password_hash
+        }
+    } else {
+        existing_staff.password_hash
+    };
+
+    let updated_staff = Staff {
+        id: staff_uuid,
+        staff_id: input.staff_id,
+        first_name: input.first_name,
+        last_name: input.last_name,
+        mobile_number: input.mobile_number,
+        photo_link: input.photo_link,
+        username: input.username,
+        password_hash,
+    };
+
+    sqlx::query(
+        "UPDATE staff SET staff_id = ?, first_name = ?, last_name = ?, mobile_number = ?, photo_link = ?, username = ?, password_hash = ? WHERE id = ?",
+    )
+    .bind(&updated_staff.staff_id)
+    .bind(&updated_staff.first_name)
+    .bind(&updated_staff.last_name)
+    .bind(&updated_staff.mobile_number)
+    .bind(&updated_staff.photo_link)
+    .bind(&updated_staff.username)
+    .bind(&updated_staff.password_hash)
+    .bind(staff_uuid.to_string())
+    .execute(&mut *tx)
+    .await
+    .map_err(map_db_err)?;
+
+    tx.commit().await.map_err(map_db_err)?;
+
+    Ok(Json(updated_staff))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/staff/{id}",
+    tag = "Staff",
+    params(("id" = String, Path, description = "Staff UUID")),
     security(("bearer_auth" = [])),
     responses((status = 204, description = "Staff deleted"), (status = 404))
 )]
 pub async fn delete_staff(
     State(state): State<AppState>,
-    Path(staff_id): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("DELETE FROM staff WHERE staff_id = ?")
-        .bind(&staff_id)
+    let staff_uuid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let result = sqlx::query("DELETE FROM staff WHERE id = ?")
+        .bind(staff_uuid.to_string())
         .execute(&state.db)
         .await
         .map_err(map_db_err)?;
@@ -763,6 +841,7 @@ fn product_from_row(row: &SqliteRow) -> Result<Product, StatusCode> {
         price_cents: row.get("price_cents"),
         stock: row.get("stock"),
         product_type,
+        details: vec![],
     })
 }
 
@@ -779,8 +858,6 @@ fn customer_from_row(row: &SqliteRow) -> Result<Customer, StatusCode> {
 }
 
 fn sale_from_row(row: &SqliteRow) -> Result<Sale, StatusCode> {
-    let total_resolved: i64 = row.get("total_resolved");
-
     Ok(Sale {
         id: parse_uuid(row.get("id"))?,
         product_id: parse_uuid(row.get("product_id"))?,
@@ -789,13 +866,14 @@ fn sale_from_row(row: &SqliteRow) -> Result<Sale, StatusCode> {
         quantity: row.get("quantity"),
         discount: row.get("discount"),
         total_cents: row.get("total_cents"),
-        total_resolved: total_resolved != 0,
+        total_resolved: row.get("total_resolved"),
         note: row.get("note"),
     })
 }
 
 fn staff_from_row(row: &SqliteRow) -> Staff {
     Staff {
+        id: Uuid::parse_str(row.get("id")).unwrap_or_default(),
         staff_id: row.get("staff_id"),
         first_name: row.get("first_name"),
         last_name: row.get("last_name"),
