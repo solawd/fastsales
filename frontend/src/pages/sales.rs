@@ -61,7 +61,7 @@ pub fn SalesListPage() -> impl IntoView {
                         <tr style="background-color: var(--bg-subtle); text-align: left;">
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Date"</th>
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Total ($)"</th>
-                            <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Status"</th>
+                            <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Resolved Amount"</th>
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Actions"</th>
                         </tr>
                     </thead>
@@ -77,27 +77,9 @@ pub fn SalesListPage() -> impl IntoView {
                                         <td style="padding: 1rem;">{sale.date_of_sale.format("%Y-%m-%d").to_string()}</td>
                                         <td style="padding: 1rem;">{format!("{:.2}", sale.total_cents as f64 / 100.0)}</td>
                                         <td style="padding: 1rem;">
-                                            <span style=move || {
-                                                if sale.total_resolved >= sale.total_cents { 
-                                                    "color: var(--state-success); font-weight: 600;" 
-                                                } else if sale.total_resolved > 0 { 
-                                                    "color: var(--state-warning); font-weight: 600;" 
-                                                } else { 
-                                                    "color: var(--state-error); font-weight: 600;" 
-                                                }
-                                            }>
-                                                {move || {
-                                                    if sale.total_resolved >= sale.total_cents { 
-                                                        "Resolved" 
-                                                    } else if sale.total_resolved > 0 { 
-                                                        "Partial" 
-                                                    } else { 
-                                                        "Pending" 
-                                                    }
-                                                }}
-                                            </span>
+                                            
                                             <span style="font-size: 0.8em; color: var(--text-muted); margin-left: 0.5rem;">
-                                                {format!("(${:.2})", sale.total_resolved as f64 / 100.0)}
+                                                {format!("{:.2}", sale.total_resolved as f64 / 100.0)}
                                             </span>
                                         </td>
                                         <td style="padding: 1rem; display: flex; gap: 0.5rem;">

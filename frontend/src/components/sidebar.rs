@@ -1,9 +1,18 @@
 use leptos::*;
-use leptos_router::{A, use_location};
+use leptos_router::{A, use_location, use_navigate};
 
 #[component]
 pub fn Sidebar() -> impl IntoView {
     let location = use_location();
+    let navigate = use_navigate();
+    
+    let handle_logout = move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = window().local_storage().unwrap().unwrap().remove_item("jwt_token");
+            navigate("/", Default::default());
+        }
+    };
     let sidebar_style = "
         width: 250px;
         background-color: var(--bg-surface);
@@ -26,12 +35,12 @@ pub fn Sidebar() -> impl IntoView {
     
     // Helper to style active links could be added here later with use_location
 
-    let logo_style = "height: 100px; width: auto; margin-bottom: 0.5rem;";
+    let logo_style = "width: 100%; height: auto; margin-bottom: 0.5rem; border-radius: var(--radius-md);";
     let ul_style = "list-style-type: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;";
 
     view! {
         <aside style=sidebar_style>
-            <div style="margin-bottom: 2rem; padding: 0 1rem;">
+            <div style="margin-bottom: 2rem;">
                 <img src="/fs_logo.png" alt="FastSales Logo" style=logo_style />
             </div>
             <nav style=nav_style>
@@ -68,6 +77,19 @@ pub fn Sidebar() -> impl IntoView {
                     </li>
                 </ul>
             </nav>
+            <div style="margin-top: auto;">
+                <A href="/profile" class={move || if location.pathname.get() == "/profile" { "sidebar-link active" } else { "sidebar-link" }} attr:style="margin-bottom: 0.5rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    "My Profile"
+                </A>
+                <button 
+                    on:click=handle_logout
+                    class="logout-btn"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    "Sign Out"
+                </button>
+            </div>
         </aside>
     }
 }

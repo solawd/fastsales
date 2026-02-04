@@ -1,6 +1,6 @@
 use leptos::*;
 use leptos_router::*;
-use shared::models::{Staff, StaffInput};
+use shared::models::{Staff, StaffInput, UploadResponse};
 use uuid::Uuid;
 
 #[cfg(target_arch = "wasm32")]
@@ -8,6 +8,9 @@ use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::JsFuture;
+#[cfg(target_arch = "wasm32")]
+use web_sys::{FormData, RequestInit, Response};
 use web_sys::Event;
 
 #[component]
@@ -210,6 +213,43 @@ pub fn StaffEditPage() -> impl IntoView {
     };
 
     #[cfg(target_arch = "wasm32")]
+    let upload_photo = move |ev: Event| {
+        let target = ev.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        if let Some(files) = target.files() {
+            if let Some(file) = files.get(0) {
+                spawn_local(async move {
+                     let form_data = FormData::new().unwrap();
+                     form_data.append_with_blob("file", &file).unwrap();
+
+                     let token = window().local_storage().ok().flatten().and_then(|s| s.get_item("jwt_token").ok().flatten()).unwrap_or_default();
+                     
+                     let mut opts = RequestInit::new();
+                     opts.set_method("POST");
+                     opts.set_body(&form_data);
+                     
+                     let request = web_sys::Request::new_with_str_and_init("/api/upload", &opts).unwrap();
+                     request.headers().set("Authorization", &format!("Bearer {}", token)).unwrap();
+                     
+                     let window = web_sys::window().unwrap();
+                     if let Ok(resp_val) = JsFuture::from(window.fetch_with_request(&request)).await {
+                         let resp: Response = resp_val.dyn_into().unwrap();
+                         if resp.ok() {
+                             if let Ok(json) = JsFuture::from(resp.json().unwrap()).await {
+                                 if let Ok(data) = serde_wasm_bindgen::from_value::<UploadResponse>(json) {
+                                     set_photo_link.set(data.url);
+                                 }
+                             }
+                         }
+                     }
+                });
+            }
+        }
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let upload_photo = move |_: Event| {};
+
+    #[cfg(target_arch = "wasm32")]
     fn event_target_value(e: &Event) -> String {
         e.target().expect("target").dyn_into::<web_sys::HtmlInputElement>().expect("input element").value()
     }
@@ -288,13 +328,20 @@ pub fn StaffEditPage() -> impl IntoView {
                 </div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <label style="font-weight: 500;">"Photo URL"</label>
-                    <input 
-                        type="text" 
-                        prop:value=photo_link
-                        on:input=move |ev| set_photo_link.set(event_target_value(&ev))
-                        style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
-                    />
+                    <label style="font-weight: 500;">"Photo"</label>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <img 
+                             src=move || if photo_link.get().is_empty() { "https://ui-avatars.com/api/?name=User".to_string() } else { photo_link.get() }
+                             alt="Preview"
+                             style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid var(--bg-surface); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);"
+                        />
+                         <input 
+                            type="file" 
+                            accept="image/*"
+                            on:change=upload_photo
+                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
+                        />
+                    </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">

@@ -22,7 +22,7 @@ use handlers::{
     create_customer, create_product, create_sale, create_staff, delete_customer, delete_product,
     delete_sale, delete_staff, get_customer, get_product, get_sale, get_staff, list_customers,
     list_products, list_sales, list_staff, update_customer, update_product, update_sale,
-    update_staff, login,
+    update_staff, login, upload_file, get_profile, get_today_sales, get_weekly_sales_stats,
 };
 use auth::auth_middleware;
 use sqlx::SqlitePool;
@@ -173,15 +173,19 @@ async fn main() {
             "/sales/:id",
             get(get_sale).put(update_sale).delete(delete_sale),
         )
+        .route("/sales/stats/today", get(get_today_sales))
+        .route("/sales/stats/week", get(get_weekly_sales_stats))
         .route("/staff", get(list_staff).post(create_staff))
         .route(
             "/staff/:id",
             get(get_staff).put(update_staff).delete(delete_staff),
         )
+        .route("/auth/profile", get(get_profile))
         .route_layer(from_fn_with_state(state.clone(), auth_middleware));
 
     let api = Router::new()
         .route("/auth/login", post(login))
+        .route("/upload", post(upload_file))
         .merge(protected);
 
     let app = Router::new()
@@ -190,6 +194,7 @@ async fn main() {
                 .url("/api-doc/openapi.json", ApiDoc::openapi()),
         )
         .nest("/api", api)
+        .nest_service("/uploads", ServeDir::new("uploads"))
         .leptos_routes(&state, leptos_routes, frontend::App)
         .fallback_service(ServeDir::new(leptos_options.site_root.clone()));
 
