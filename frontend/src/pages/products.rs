@@ -8,10 +8,13 @@ use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+use crate::utils::CURRENCY;
+
 #[component]
 pub fn ProductListPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (products, set_products) = create_signal(Vec::<Product>::new());
+    let (search_query, set_search_query) = create_signal(String::new());
     
     let navigate = use_navigate();
     
@@ -23,7 +26,13 @@ pub fn ProductListPage() -> impl IntoView {
             #[cfg(target_arch = "wasm32")]
             spawn_local(async move {
                 let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-                if let Ok(res) = Request::get("/api/products")
+                let url = if search_query.get().is_empty() {
+                    "/api/products".to_string()
+                } else {
+                    format!("/api/products?search={}", search_query.get())
+                };
+
+                if let Ok(res) = Request::get(&url)
                     .header("Authorization", &format!("Bearer {}", token))
                     .send().await {
                     if res.status() == 401 {
@@ -76,6 +85,36 @@ pub fn ProductListPage() -> impl IntoView {
                 </A>
             </div>
 
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                {
+                    let fetch_products_enter = fetch_products.clone();
+                    let fetch_products_click = fetch_products.clone();
+                    view! {
+                        <>
+                        <input 
+                            type="text" 
+                            placeholder="Search products..."
+                            prop:value=search_query
+                            on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                            on:keydown=move |ev| {
+                                if ev.key() == "Enter" {
+                                    fetch_products_enter();
+                                }
+                            }
+                            style="width: 40%;"
+                        />
+                        <button 
+                            class="btn-primary"
+                            on:click=move |_| fetch_products_click()
+                            style="padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer;"
+                        >
+                            "Search"
+                        </button>
+                        </>
+                    }
+                }
+            </div>
+
             <div style="overflow-x: auto; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
@@ -98,7 +137,7 @@ pub fn ProductListPage() -> impl IntoView {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{product.name}</td>
                                         <td style="padding: 1rem;">{product.product_type.as_str()}</td>
-                                        <td style="padding: 1rem;">{format!("${:.2}", product.price_cents as f64 / 100.0)}</td>
+                                        <td style="padding: 1rem;">{format!("{}{:.2}", CURRENCY, product.price_cents as f64 / 100.0)}</td>
                                         <td style="padding: 1rem;">{product.stock}</td>
                                         <td style="padding: 1rem; display: flex; gap: 0.5rem;">
                                             <A href=format!("/products/{}", product.id) attr:style="color: var(--brand-primary); text-decoration: none; font-weight: 500;">"Edit"</A>
@@ -254,7 +293,6 @@ pub fn ProductEditPage() -> impl IntoView {
                                 type="text" 
                                 prop:value=name
                                 on:input=move |ev| set_name.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
 
@@ -264,19 +302,17 @@ pub fn ProductEditPage() -> impl IntoView {
                                 prop:value=description
                                 on:input=move |ev| set_description.set(event_target_value(&ev))
                                 rows="4"
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
 
                          <div style="display: flex; gap: 1rem;">
                             <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-                                <label style="font-weight: 500;">"Price ($)"</label>
+                                <label style="font-weight: 500;">{format!("Price ({})", CURRENCY)}</label>
                                 <input 
                                     type="number" 
                                     step="0.01"
                                     prop:value=price
                                     on:input=move |ev| set_price.set(event_target_value(&ev).parse().unwrap_or(0.0))
-                                    style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                                 />
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -285,7 +321,6 @@ pub fn ProductEditPage() -> impl IntoView {
                                     type="number" 
                                     prop:value=stock
                                     on:input=move |ev| set_stock.set(event_target_value(&ev).parse().unwrap_or(0))
-                                    style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                                 />
                             </div>
                         </div>
@@ -295,7 +330,6 @@ pub fn ProductEditPage() -> impl IntoView {
                             <select 
                                 on:change=move |ev| set_prod_type.set(event_target_value(&ev))
                                 prop:value=prod_type
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             >
                                 <option value="physical_good">"Physical Good"</option>
                                 <option value="service">"Service"</option>
@@ -315,14 +349,14 @@ pub fn ProductEditPage() -> impl IntoView {
                                 placeholder="Detail Name (e.g. Color)"
                                 prop:value=new_detail_name
                                 on:input=move |ev| set_new_detail_name.set(event_target_value(&ev))
-                                style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
+                                style="flex: 1;"
                             />
                             <input 
                                 type="text" 
                                 placeholder="Value (e.g. Red)"
                                 prop:value=new_detail_value
                                 on:input=move |ev| set_new_detail_value.set(event_target_value(&ev))
-                                style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
+                                style="flex: 1;"
                             />
                             <button 
                                 on:click=add_detail

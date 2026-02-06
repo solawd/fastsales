@@ -172,3 +172,9 @@ pub struct DailySales {
     pub total_sales_cents: i64,
     pub count: i64,
 }
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct SalesListResponse {
+    pub sales: Vec<Sale>,
+    pub total_sales_period_cents: i64,
+}

@@ -7,12 +7,17 @@ use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+use crate::utils::CURRENCY;
+
 #[component]
 pub fn DashboardPage() -> impl IntoView {
     let (today_sales, set_today_sales) = create_signal(SalesStats::default());
     let (weekly_sales, set_weekly_sales) = create_signal(Vec::<shared::models::DailySales>::new());
     
+    let navigate = leptos_router::use_navigate();
+
     create_effect(move |_| {
+        let navigate = navigate.clone();
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -21,6 +26,10 @@ pub fn DashboardPage() -> impl IntoView {
             if let Ok(resp) = Request::get("/api/sales/stats/today")
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
+                 if resp.status() == 401 {
+                     navigate("/", Default::default());
+                     return;
+                 }
                  if let Ok(stats) = resp.json::<SalesStats>().await {
                      set_today_sales.set(stats);
                  }
@@ -30,6 +39,10 @@ pub fn DashboardPage() -> impl IntoView {
             if let Ok(resp) = Request::get("/api/sales/stats/week")
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
+                 if resp.status() == 401 {
+                     navigate("/", Default::default());
+                     return;
+                 }
                  if let Ok(stats) = resp.json::<Vec<shared::models::DailySales>>().await {
                      set_weekly_sales.set(stats);
                  }
@@ -38,7 +51,7 @@ pub fn DashboardPage() -> impl IntoView {
     });
 
     // Helper to format currency
-    let format_currency = |cents: i64| format!("${:.2}", cents as f64 / 100.0);
+    let format_currency = |cents: i64| format!("{}{:.2}", CURRENCY, cents as f64 / 100.0);
 
     view! {
         <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -131,7 +144,7 @@ pub fn DashboardPage() -> impl IntoView {
                             <div style="display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
                                     <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-primary);"></span>
-                                    "Total Sales ($)"
+                                    {format!("Total Sales ({})", CURRENCY)}
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
                                     <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span>
@@ -192,7 +205,7 @@ pub fn DashboardPage() -> impl IntoView {
                                         <g>
                                             <circle cx=x cy=y r="1.5" fill="white" stroke="var(--brand-primary)" stroke-width="0.5" />
                                             <text x=x y=format!("{:.2}", y - 5.0) font-size="3" text-anchor="middle" fill="var(--brand-dark)" font-weight="600">
-                                                {format!("${}", val / 100)}
+                                                {format!("{}{}", CURRENCY, val / 100)}
                                             </text>
                                         </g>
                                      }

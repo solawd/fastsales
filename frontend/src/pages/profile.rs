@@ -163,11 +163,10 @@ pub fn ProfilePage() -> impl IntoView {
                 <div style="display: flex; gap: 1rem;">
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
                         <label style="font-weight: 500;">"First Name"</label>
-                        <input 
                             type="text" 
                             prop:value=first_name
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -176,7 +175,7 @@ pub fn ProfilePage() -> impl IntoView {
                             type="text" 
                             prop:value=last_name
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                 </div>
@@ -188,7 +187,7 @@ pub fn ProfilePage() -> impl IntoView {
                             type="text" 
                             prop:value=staff_id_field
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -197,7 +196,7 @@ pub fn ProfilePage() -> impl IntoView {
                             type="text" 
                             prop:value=mobile_number
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                 </div>
@@ -209,7 +208,7 @@ pub fn ProfilePage() -> impl IntoView {
                             type="text" 
                             prop:value=username
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -219,7 +218,6 @@ pub fn ProfilePage() -> impl IntoView {
                             placeholder="Leave blank to keep current"
                             prop:value=password
                             on:input=move |ev| set_password.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                 </div>
@@ -236,7 +234,7 @@ pub fn ProfilePage() -> impl IntoView {
                             type="file" 
                             accept="image/*"
                             disabled=true
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md); background-color: var(--bg-page); color: var(--text-muted);"
+                            style="background-color: var(--bg-page); color: var(--text-muted);"
                         />
                     </div>
                 </div>

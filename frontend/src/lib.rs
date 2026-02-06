@@ -5,6 +5,7 @@ use leptos_router::{Route, Router, Routes};
 pub mod components;
 use components::layout::DashboardLayout;
 pub mod pages;
+pub mod utils;
 
 use pages::login::LoginPage;
 use pages::home::DashboardPage;

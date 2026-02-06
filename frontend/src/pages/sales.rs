@@ -1,6 +1,6 @@
 use leptos::*;
 use leptos_router::*;
-use shared::models::{Sale, SaleInput, Product, Customer};
+use shared::models::{Sale, SaleInput, Product, Customer, SalesListResponse};
 use uuid::Uuid;
 use chrono::{DateTime, Utc, NaiveDate};
 
@@ -9,41 +9,74 @@ use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+use crate::utils::CURRENCY;
+
 #[component]
 pub fn SalesListPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (sales, set_sales) = create_signal(Vec::<Sale>::new());
-
+    let (total_period_sales, set_total_period_sales) = create_signal(0i64);
+    let (start_date, set_start_date) = create_signal(String::new());
+    let (end_date, set_end_date) = create_signal(String::new());
+    
+    let navigate = use_navigate();
     let fetch_sales = move || {
+        let navigate = navigate.clone();
         #[cfg(target_arch = "wasm32")]
-        spawn_local(async move {
-            let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            if let Ok(res) = Request::get("/api/sales")
-                .header("Authorization", &format!("Bearer {}", token))
-                .send().await {
-                if let Ok(data) = res.json::<Vec<Sale>>().await {
-                    set_sales.set(data);
+            spawn_local(async move {
+                let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
+                
+                let mut url = "/api/sales".to_string();
+                let mut params = Vec::new();
+                if !start_date.get().is_empty() {
+                    params.push(format!("start_date={}", start_date.get()));
                 }
-            }
-        });
+                if !end_date.get().is_empty() {
+                    params.push(format!("end_date={}", end_date.get()));
+                }
+                if !params.is_empty() {
+                    url.push('?');
+                    url.push_str(&params.join("&"));
+                }
+
+                if let Ok(res) = Request::get(&url)
+                    .header("Authorization", &format!("Bearer {}", token))
+                    .send().await {
+                    if res.status() == 401 {
+                        navigate("/", Default::default());
+                        return;
+                    }
+                    if let Ok(data) = res.json::<SalesListResponse>().await {
+                        set_sales.set(data.sales);
+                        set_total_period_sales.set(data.total_sales_period_cents);
+                    }
+                }
+            });
     };
 
-    create_effect(move |_| {
-        fetch_sales();
+    create_effect({
+        let fetch_sales = fetch_sales.clone();
+        move |_| {
+            fetch_sales();
+        }
     });
 
-    let delete_action = move |id: Uuid| {
-        #[allow(unused_variables)]
-        let id = id;
-        #[cfg(target_arch = "wasm32")]
-        spawn_local(async move {
-            let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            let _ = Request::delete(&format!("/api/sales/{}", id))
-                .header("Authorization", &format!("Bearer {}", token))
-                .send()
-                .await;
-            fetch_sales();
-        });
+    let delete_action = {
+        let fetch_sales = fetch_sales.clone();
+        move |id: Uuid| {
+            let fetch_sales = fetch_sales.clone();
+            #[allow(unused_variables)]
+            let id = id;
+            #[cfg(target_arch = "wasm32")]
+            spawn_local(async move {
+                let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
+                let _ = Request::delete(&format!("/api/sales/{}", id))
+                    .header("Authorization", &format!("Bearer {}", token))
+                    .send()
+                    .await;
+                fetch_sales();
+            });
+        }
     };
 
     view! {
@@ -55,12 +88,52 @@ pub fn SalesListPage() -> impl IntoView {
                 </A>
             </div>
 
+            <div style="background: var(--bg-surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); margin-bottom: 2rem;">
+                <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label style="font-weight: 500; font-size: 0.9rem;">"Start Date"</label>
+                        <input 
+                            type="date" 
+                            prop:value=start_date
+                            on:input=move |ev| set_start_date.set(event_target_value(&ev))
+                        />
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <label style="font-weight: 500; font-size: 0.9rem;">"End Date"</label>
+                        <input 
+                            type="date" 
+                            prop:value=end_date
+                            on:input=move |ev| set_end_date.set(event_target_value(&ev))
+                        />
+                    </div>
+                    <button 
+                        class="btn-primary"
+                        on:click={
+                            let fetch_sales = fetch_sales.clone();
+                            move |_| fetch_sales()
+                        }
+                        style="padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer;"
+                    >
+                        "Filter"
+                    </button>
+                    
+                    <div style="margin-left: auto; text-align: right;">
+                         <span style="display: block; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.25rem;">"Total Sales for Period"</span>
+                         <span style="font-size: 1.5rem; font-weight: 700; color: var(--brand-primary);">
+                            {move || format!("{}{:.2}", CURRENCY, total_period_sales.get() as f64 / 100.0)}
+                         </span>
+                    </div>
+                </div>
+            </div>
+
+
+
             <div style="overflow-x: auto; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background-color: var(--bg-subtle); text-align: left;">
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Date"</th>
-                            <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Total ($)"</th>
+                            <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">{format!("Total ({})", CURRENCY)}</th>
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Resolved Amount"</th>
                             <th style="padding: 1rem; border-bottom: 1px solid var(--border-subtle);">"Actions"</th>
                         </tr>
@@ -71,7 +144,7 @@ pub fn SalesListPage() -> impl IntoView {
                             key=|sale| sale.id
                             children=move |sale| {
                                 let s_id = sale.id;
-                                let delete_handler = delete_action;
+                                let delete_handler = delete_action.clone();
                                 view! {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{sale.date_of_sale.format("%Y-%m-%d").to_string()}</td>
@@ -234,7 +307,6 @@ pub fn SalesEditPage() -> impl IntoView {
                             <select 
                                 on:change=move |ev| set_product_id.set(event_target_value(&ev))
                                 prop:value=product_id
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             >
                                 <option value="">"Select Product..."</option>
                                 <For
@@ -251,7 +323,6 @@ pub fn SalesEditPage() -> impl IntoView {
                             <select 
                                 on:change=move |ev| set_customer_id.set(event_target_value(&ev))
                                 prop:value=customer_id
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             >
                                 <option value="">"Select Customer..."</option>
                                 <For
@@ -272,7 +343,6 @@ pub fn SalesEditPage() -> impl IntoView {
                                 type="date" 
                                 prop:value=date_of_sale
                                 on:input=move |ev| set_date_of_sale.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -281,43 +351,39 @@ pub fn SalesEditPage() -> impl IntoView {
                                 type="number" 
                                 prop:value=quantity
                                 on:input=move |ev| set_quantity.set(event_target_value(&ev).parse().unwrap_or(0))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
 
                      <div style="display: flex; gap: 1rem;">
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-                            <label style="font-weight: 500;">"Total ($)"</label>
+                            <label style="font-weight: 500;">{format!("Total Cost ({})", CURRENCY)}</label>
                             <input 
                                 type="number" 
                                 step="0.01"
                                 prop:value=total
                                 on:input=move |ev| set_total.set(event_target_value(&ev).parse().unwrap_or(0.0))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                          <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-                            <label style="font-weight: 500;">"Discount ($)"</label>
+                            <label style="font-weight: 500;">{format!("Discount ({})", CURRENCY)}</label>
                             <input 
                                 type="number" 
                                 step="0.01"
                                 prop:value=discount
                                 on:input=move |ev| set_discount.set(event_target_value(&ev).parse().unwrap_or(0.0))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                        <label style="font-weight: 500;">"Amount Paid ($)"</label>
-                        <input 
-                            type="number" 
-                            step="0.01"
-                            prop:value=resolved_amount
-                            on:input=move |ev| set_resolved_amount.set(event_target_value(&ev).parse().unwrap_or(0.0))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
-                        />
+                        <label style="font-weight: 500;">{format!("Amount Paid ({})", CURRENCY)}</label>
+                            <input 
+                                type="number" 
+                                step="0.01"
+                                prop:value=resolved_amount
+                                on:input=move |ev| set_resolved_amount.set(event_target_value(&ev).parse().unwrap_or(0.0))
+                            />
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 0.5rem;">
@@ -326,7 +392,6 @@ pub fn SalesEditPage() -> impl IntoView {
                             prop:value=note
                             on:input=move |ev| set_note.set(event_target_value(&ev))
                             rows="3"
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
 

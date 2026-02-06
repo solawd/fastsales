@@ -13,6 +13,7 @@ use wasm_bindgen_futures::spawn_local;
 pub fn CustomersListPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (customers, set_customers) = create_signal(Vec::<Customer>::new());
+    let (search_query, set_search_query) = create_signal(String::new());
     
     let navigate = use_navigate();
 
@@ -21,7 +22,13 @@ pub fn CustomersListPage() -> impl IntoView {
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            if let Ok(res) = Request::get("/api/customers")
+            
+            let mut url = "/api/customers".to_string();
+            if !search_query.get().is_empty() {
+                url.push_str(&format!("?search={}", search_query.get()));
+            }
+
+            if let Ok(res) = Request::get(&url)
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                 
@@ -44,19 +51,22 @@ pub fn CustomersListPage() -> impl IntoView {
         }
     });
 
-    let delete_action = move |id: Uuid| {
-        #[allow(unused_variables)]
-        let id = id;
-        let fetch_customers = fetch_customers.clone(); // Clone for async block
-        #[cfg(target_arch = "wasm32")]
-        spawn_local(async move {
-            let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            let _ = Request::delete(&format!("/api/customers/{}", id))
-                .header("Authorization", &format!("Bearer {}", token))
-                .send()
-                .await;
-            fetch_customers();
-        });
+    let delete_action = {
+        let fetch_customers = fetch_customers.clone();
+        move |id: Uuid| {
+            let fetch_customers = fetch_customers.clone();
+            #[allow(unused_variables)]
+            let id = id;
+            #[cfg(target_arch = "wasm32")]
+            spawn_local(async move {
+                let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
+                let _ = Request::delete(&format!("/api/customers/{}", id))
+                    .header("Authorization", &format!("Bearer {}", token))
+                    .send()
+                    .await;
+                fetch_customers();
+            });
+        }
     };
 
     view! {
@@ -66,6 +76,34 @@ pub fn CustomersListPage() -> impl IntoView {
                 <A href="/customers/create" class="btn-primary" attr:style="margin-left: auto; text-decoration: none; display: inline-block; padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); font-weight: 600;">
                     "Add Customer"
                 </A>
+            </div>
+
+            <div style="margin-bottom: 2rem; display: flex; gap: 1rem;">
+                 <input 
+                    type="text" 
+                    placeholder="Search customers..."
+                    prop:value=search_query
+                    on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                    on:keydown={
+                        let fetch_customers = fetch_customers.clone();
+                        move |ev| {
+                            if ev.key() == "Enter" {
+                                fetch_customers();
+                            }
+                        }
+                    }
+                    style="width: 40%;"
+                />
+                <button 
+                    class="btn-primary"
+                    on:click={
+                        let fetch_customers = fetch_customers.clone();
+                        move |_| fetch_customers()
+                    }
+                    style="padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer;"
+                >
+                    "Search"
+                </button>
             </div>
 
             <div style="overflow-x: auto; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
@@ -249,7 +287,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="text" 
                                 prop:value=first_name
                                 on:input=move |ev| set_first_name.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -258,7 +295,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="text" 
                                 prop:value=last_name
                                 on:input=move |ev| set_last_name.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
@@ -269,7 +305,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=middle_name
                             on:input=move |ev| set_middle_name.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
 
@@ -279,7 +314,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                             type="email" 
                             prop:value=email
                             on:input=move |ev| set_email.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
 
@@ -290,7 +324,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="tel" 
                                 prop:value=mobile_number
                                 on:input=move |ev| set_mobile_number.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -299,7 +332,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="date"
                                 prop:value=date_of_birth
                                 on:input=move |ev| set_date_of_birth.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
@@ -317,14 +349,14 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 placeholder="Detail Name (e.g. Loyalty ID)"
                                 prop:value=new_detail_name
                                 on:input=move |ev| set_new_detail_name.set(event_target_value(&ev))
-                                style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
+                                style="flex: 1;"
                             />
                             <input
                                 type="text"
                                 placeholder="Value"
                                 prop:value=new_detail_value
                                 on:input=move |ev| set_new_detail_value.set(event_target_value(&ev))
-                                style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
+                                style="flex: 1;"
                             />
                             <button
                                 on:click=add_detail

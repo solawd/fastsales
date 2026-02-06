@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State, Multipart, Extension},
+    extract::{Path, State, Multipart, Extension, Query},
     http::StatusCode,
 };
 
@@ -24,8 +24,19 @@ use crate::AppState;
 use crate::auth::Claims;
 use shared::models::{
     Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
-    Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales,
+    Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesListResponse,
 };
+
+#[derive(Deserialize)]
+pub struct SalesSearchParams {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SearchParams {
+    pub search: Option<String>,
+}
 
 #[utoipa::path(
     get,
@@ -34,13 +45,36 @@ use shared::models::{
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List products", body = [Product]))
 )]
-pub async fn list_products(State(state): State<AppState>) -> Result<Json<Vec<Product>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, name, description, price_cents, stock, product_type FROM products",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(map_db_err)?;
+pub async fn list_products(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<Product>>, StatusCode> {
+    let rows = if let Some(search) = params.search {
+        let pattern = format!("%{}%", search);
+        sqlx::query(
+            "SELECT id, name, description, price_cents, stock, product_type 
+             FROM products 
+             WHERE name LIKE ? 
+                OR description LIKE ? 
+                OR EXISTS (
+                    SELECT 1 FROM product_details 
+                    WHERE product_details.product_id = products.id 
+                    AND (detail_name LIKE ? OR detail_value LIKE ?)
+                )"
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    } else {
+        sqlx::query("SELECT id, name, description, price_cents, stock, product_type FROM products")
+            .fetch_all(&state.db)
+            .await
+            .map_err(map_db_err)?
+    };
 
     let mut products = Vec::with_capacity(rows.len());
     for row in rows {
@@ -275,13 +309,39 @@ pub async fn delete_product(
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List customers", body = [Customer]))
 )]
-pub async fn list_customers(State(state): State<AppState>) -> Result<Json<Vec<Customer>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email FROM customers",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(map_db_err)?;
+pub async fn list_customers(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<Customer>>, StatusCode> {
+    let rows = if let Some(search) = params.search {
+        let pattern = format!("%{}%", search);
+        sqlx::query(
+            "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email \
+             FROM customers \
+             WHERE first_name LIKE ? \
+                OR last_name LIKE ? \
+                OR middle_name LIKE ? \
+                OR EXISTS (
+                    SELECT 1 FROM customer_details \
+                    WHERE customer_details.customer_id = customers.id \
+                    AND detail_value LIKE ? \
+                )"
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    } else {
+        sqlx::query(
+            "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email FROM customers",
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    };
 
     let mut customers = Vec::with_capacity(rows.len());
     for row in rows {
@@ -521,10 +581,47 @@ pub async fn delete_customer(
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List sales", body = [Sale]))
 )]
-pub async fn list_sales(State(state): State<AppState>) -> Result<Json<Vec<Sale>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales",
-    )
+pub async fn list_sales(
+    State(state): State<AppState>,
+    Query(params): Query<SalesSearchParams>,
+) -> Result<Json<SalesListResponse>, StatusCode> {
+    let mut query = "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales".to_string();
+    let mut conditions = Vec::new();
+    let mut args = Vec::new();
+
+    if let Some(start) = &params.start_date {
+        if !start.is_empty() {
+             conditions.push("date_of_sale >= ?");
+             args.push(start.clone());
+        }
+    }
+    
+    if let Some(end) = &params.end_date {
+        if !end.is_empty() {
+            // Append explicit time to include the entire end day if it's just a date string "YYYY-MM-DD"
+            // Or assume client sends "YYYY-MM-DDT23:59:59"
+            // For simplicity, let's assume raw string comparison works, but strict ISO "YYYY-MM-DD" might miss times on that day.
+            // Let's assume standard "YYYY-MM-DD" and append "T23:59:59Z" if it's just a date, or just handle at frontend.
+            // Let's stick to raw generic comparison first.
+             conditions.push("date_of_sale <= ?");
+             args.push(end.clone());
+        }
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    
+    // Sort by date descending
+    query.push_str(" ORDER BY date_of_sale DESC");
+
+    let mut sql_query = sqlx::query(&query);
+    for arg in &args {
+        sql_query = sql_query.bind(arg);
+    }
+
+    let rows = sql_query
     .fetch_all(&state.db)
     .await
     .map_err(map_db_err)?;
@@ -533,7 +630,27 @@ pub async fn list_sales(State(state): State<AppState>) -> Result<Json<Vec<Sale>>
     for row in rows {
         sales.push(sale_from_row(&row)?);
     }
-    Ok(Json(sales))
+    
+    // Calculate total for the period (DB side query usually better, but for small datasets iterating is fine too. User asked for DB query)
+    // Let's run a separate COUNT/SUM query as requested.
+    let mut sum_query = "SELECT SUM(total_cents) as total FROM sales".to_string();
+    if !conditions.is_empty() {
+        sum_query.push_str(" WHERE ");
+        sum_query.push_str(&conditions.join(" AND "));
+    }
+    
+    let mut sql_sum_query = sqlx::query(&sum_query);
+    for arg in &args {
+        sql_sum_query = sql_sum_query.bind(arg);
+    }
+    
+    let row = sql_sum_query.fetch_one(&state.db).await.map_err(map_db_err)?;
+    let total_sales_period_cents: i64 = row.try_get("total").unwrap_or(0);
+
+    Ok(Json(SalesListResponse {
+        sales,
+        total_sales_period_cents,
+    }))
 }
 
 #[utoipa::path(

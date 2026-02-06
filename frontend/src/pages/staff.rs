@@ -270,7 +270,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=first_name
                             on:input=move |ev| set_first_name.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -279,7 +278,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=last_name
                             on:input=move |ev| set_last_name.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                 </div>
@@ -291,7 +289,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=staff_id_field
                             on:input=move |ev| set_staff_id_field.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -300,7 +297,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=mobile_number
                             on:input=move |ev| set_mobile_number.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                 </div>
@@ -312,7 +308,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=username
                             on:input=move |ev| set_username.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -322,7 +317,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             placeholder=move || if is_create() { "Required" } else { "Leave blank to keep current" }
                             prop:value=password
                             on:input=move |ev| set_password.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                 </div>
@@ -339,7 +333,6 @@ pub fn StaffEditPage() -> impl IntoView {
                             type="file" 
                             accept="image/*"
                             on:change=upload_photo
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
                 </div>
