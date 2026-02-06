@@ -1,13 +1,16 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, State, Multipart, Extension, Query},
     http::StatusCode,
 };
-use chrono::NaiveDate;
+
+
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use jsonwebtoken::{EncodingKey, Header};
 use sqlx::sqlite::SqliteRow;
 use sqlx::Row;
@@ -15,13 +18,25 @@ use rand_core::OsRng;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use chrono::{Utc, Datelike, Duration};
 
 use crate::AppState;
 use crate::auth::Claims;
 use shared::models::{
-    Customer, CustomerInput, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
-    Sale, SaleInput, Staff, StaffInput,
+    Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
+    Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesListResponse,
 };
+
+#[derive(Deserialize)]
+pub struct SalesSearchParams {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SearchParams {
+    pub search: Option<String>,
+}
 
 #[utoipa::path(
     get,
@@ -30,13 +45,36 @@ use shared::models::{
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List products", body = [Product]))
 )]
-pub async fn list_products(State(state): State<AppState>) -> Result<Json<Vec<Product>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, name, description, price_cents, stock, product_type FROM products",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(map_db_err)?;
+pub async fn list_products(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<Product>>, StatusCode> {
+    let rows = if let Some(search) = params.search {
+        let pattern = format!("%{}%", search);
+        sqlx::query(
+            "SELECT id, name, description, price_cents, stock, product_type 
+             FROM products 
+             WHERE name LIKE ? 
+                OR description LIKE ? 
+                OR EXISTS (
+                    SELECT 1 FROM product_details 
+                    WHERE product_details.product_id = products.id 
+                    AND (detail_name LIKE ? OR detail_value LIKE ?)
+                )"
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    } else {
+        sqlx::query("SELECT id, name, description, price_cents, stock, product_type FROM products")
+            .fetch_all(&state.db)
+            .await
+            .map_err(map_db_err)?
+    };
 
     let mut products = Vec::with_capacity(rows.len());
     for row in rows {
@@ -271,17 +309,62 @@ pub async fn delete_product(
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List customers", body = [Customer]))
 )]
-pub async fn list_customers(State(state): State<AppState>) -> Result<Json<Vec<Customer>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email FROM customers",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(map_db_err)?;
+pub async fn list_customers(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<Customer>>, StatusCode> {
+    let rows = if let Some(search) = params.search {
+        let pattern = format!("%{}%", search);
+        sqlx::query(
+            "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email \
+             FROM customers \
+             WHERE first_name LIKE ? \
+                OR last_name LIKE ? \
+                OR middle_name LIKE ? \
+                OR EXISTS (
+                    SELECT 1 FROM customer_details \
+                    WHERE customer_details.customer_id = customers.id \
+                    AND detail_value LIKE ? \
+                )"
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    } else {
+        sqlx::query(
+            "SELECT id, first_name, last_name, middle_name, mobile_number, date_of_birth, email FROM customers",
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?
+    };
 
     let mut customers = Vec::with_capacity(rows.len());
     for row in rows {
-        customers.push(customer_from_row(&row)?);
+        let mut customer = customer_from_row(&row)?;
+        let details_rows = sqlx::query(
+            "SELECT customer_id, detail_name, detail_value FROM customer_details WHERE customer_id = ?",
+        )
+        .bind(customer.id.to_string())
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
+
+        let details: Vec<CustomerDetails> = details_rows
+            .into_iter()
+            .map(|row| CustomerDetails {
+                customer_id: parse_uuid(row.get("customer_id")).unwrap_or_default(),
+                detail_name: row.get("detail_name"),
+                detail_value: row.get("detail_value"),
+            })
+            .collect();
+        
+        customer.details = details;
+        customers.push(customer);
     }
     Ok(Json(customers))
 }
@@ -298,19 +381,23 @@ pub async fn create_customer(
     State(state): State<AppState>,
     Json(input): Json<CustomerInput>,
 ) -> Result<(StatusCode, Json<Customer>), StatusCode> {
-    if !is_valid_date_of_birth(&input.date_of_birth) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
+    let customer_id = Uuid::new_v4();
     let customer = Customer {
-        id: Uuid::new_v4(),
+        id: customer_id,
         first_name: input.first_name,
         last_name: input.last_name,
         middle_name: input.middle_name,
         mobile_number: input.mobile_number,
         date_of_birth: input.date_of_birth,
         email: input.email,
+        details: input.details.iter().map(|d| CustomerDetails {
+            customer_id,
+            detail_name: d.detail_name.clone(),
+            detail_value: d.detail_value.clone(),
+        }).collect(),
     };
+
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
 
     sqlx::query(
         "INSERT INTO customers (id, first_name, last_name, middle_name, mobile_number, date_of_birth, email) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -322,9 +409,24 @@ pub async fn create_customer(
     .bind(&customer.mobile_number)
     .bind(&customer.date_of_birth)
     .bind(&customer.email)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(map_db_err)?;
+
+    for detail in input.details {
+        sqlx::query(
+            "INSERT INTO customer_details (id, customer_id, detail_name, detail_value) VALUES (?, ?, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(customer_id.to_string())
+        .bind(&detail.detail_name)
+        .bind(&detail.detail_value)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+    }
+
+    tx.commit().await.map_err(map_db_err)?;
 
     Ok((StatusCode::CREATED, Json(customer)))
 }
@@ -350,7 +452,25 @@ pub async fn get_customer(
     .map_err(map_db_err)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    Ok(Json(customer_from_row(&row)?))
+    let mut customer = customer_from_row(&row)?;
+    let details_rows = sqlx::query(
+        "SELECT customer_id, detail_name, detail_value FROM customer_details WHERE customer_id = ?",
+    )
+    .bind(customer.id.to_string())
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    customer.details = details_rows
+        .into_iter()
+        .map(|row| CustomerDetails {
+            customer_id: parse_uuid(row.get("customer_id")).unwrap_or_default(),
+            detail_name: row.get("detail_name"),
+            detail_value: row.get("detail_value"),
+        })
+        .collect();
+
+    Ok(Json(customer))
 }
 
 #[utoipa::path(
@@ -367,9 +487,7 @@ pub async fn update_customer(
     Path(id): Path<Uuid>,
     Json(input): Json<CustomerInput>,
 ) -> Result<Json<Customer>, StatusCode> {
-    if !is_valid_date_of_birth(&input.date_of_birth) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+
 
     let customer = Customer {
         id,
@@ -379,7 +497,14 @@ pub async fn update_customer(
         mobile_number: input.mobile_number,
         date_of_birth: input.date_of_birth,
         email: input.email,
+        details: input.details.iter().map(|d| CustomerDetails {
+            customer_id: id,
+            detail_name: d.detail_name.clone(),
+            detail_value: d.detail_value.clone(),
+        }).collect(),
     };
+
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
 
     let result = sqlx::query(
         "UPDATE customers SET first_name = ?, last_name = ?, middle_name = ?, mobile_number = ?, date_of_birth = ?, email = ? WHERE id = ?",
@@ -391,13 +516,35 @@ pub async fn update_customer(
     .bind(&customer.date_of_birth)
     .bind(&customer.email)
     .bind(customer.id.to_string())
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(map_db_err)?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+
+    // Replace details
+    sqlx::query("DELETE FROM customer_details WHERE customer_id = ?")
+        .bind(customer.id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+
+    for detail in input.details {
+        sqlx::query(
+            "INSERT INTO customer_details (id, customer_id, detail_name, detail_value) VALUES (?, ?, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(customer.id.to_string())
+        .bind(&detail.detail_name)
+        .bind(&detail.detail_value)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+    }
+
+    tx.commit().await.map_err(map_db_err)?;
 
     Ok(Json(customer))
 }
@@ -434,10 +581,47 @@ pub async fn delete_customer(
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List sales", body = [Sale]))
 )]
-pub async fn list_sales(State(state): State<AppState>) -> Result<Json<Vec<Sale>>, StatusCode> {
-    let rows = sqlx::query(
-        "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales",
-    )
+pub async fn list_sales(
+    State(state): State<AppState>,
+    Query(params): Query<SalesSearchParams>,
+) -> Result<Json<SalesListResponse>, StatusCode> {
+    let mut query = "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales".to_string();
+    let mut conditions = Vec::new();
+    let mut args = Vec::new();
+
+    if let Some(start) = &params.start_date {
+        if !start.is_empty() {
+             conditions.push("date_of_sale >= ?");
+             args.push(start.clone());
+        }
+    }
+    
+    if let Some(end) = &params.end_date {
+        if !end.is_empty() {
+            // Append explicit time to include the entire end day if it's just a date string "YYYY-MM-DD"
+            // Or assume client sends "YYYY-MM-DDT23:59:59"
+            // For simplicity, let's assume raw string comparison works, but strict ISO "YYYY-MM-DD" might miss times on that day.
+            // Let's assume standard "YYYY-MM-DD" and append "T23:59:59Z" if it's just a date, or just handle at frontend.
+            // Let's stick to raw generic comparison first.
+             conditions.push("date_of_sale <= ?");
+             args.push(end.clone());
+        }
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    
+    // Sort by date descending
+    query.push_str(" ORDER BY date_of_sale DESC");
+
+    let mut sql_query = sqlx::query(&query);
+    for arg in &args {
+        sql_query = sql_query.bind(arg);
+    }
+
+    let rows = sql_query
     .fetch_all(&state.db)
     .await
     .map_err(map_db_err)?;
@@ -446,7 +630,27 @@ pub async fn list_sales(State(state): State<AppState>) -> Result<Json<Vec<Sale>>
     for row in rows {
         sales.push(sale_from_row(&row)?);
     }
-    Ok(Json(sales))
+    
+    // Calculate total for the period (DB side query usually better, but for small datasets iterating is fine too. User asked for DB query)
+    // Let's run a separate COUNT/SUM query as requested.
+    let mut sum_query = "SELECT SUM(total_cents) as total FROM sales".to_string();
+    if !conditions.is_empty() {
+        sum_query.push_str(" WHERE ");
+        sum_query.push_str(&conditions.join(" AND "));
+    }
+    
+    let mut sql_sum_query = sqlx::query(&sum_query);
+    for arg in &args {
+        sql_sum_query = sql_sum_query.bind(arg);
+    }
+    
+    let row = sql_sum_query.fetch_one(&state.db).await.map_err(map_db_err)?;
+    let total_sales_period_cents: i64 = row.try_get("total").unwrap_or(0);
+
+    Ok(Json(SalesListResponse {
+        sales,
+        total_sales_period_cents,
+    }))
 }
 
 #[utoipa::path(
@@ -514,6 +718,98 @@ pub async fn get_sale(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(sale_from_row(&row)?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/sales/stats/today",
+    tag = "Sales",
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get today's sales stats", body = SalesStats))
+)]
+pub async fn get_today_sales(
+    State(state): State<AppState>,
+) -> Result<Json<shared::models::SalesStats>, StatusCode> {
+    let row = sqlx::query(
+        "SELECT SUM(total_resolved) as total, COUNT(*) as count FROM sales WHERE date(date_of_sale) = date('now')",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    let total: Option<i64> = row.try_get("total").unwrap_or(Some(0));
+    let count: i64 = row.try_get("count").unwrap_or(0);
+
+    Ok(Json(shared::models::SalesStats {
+        total_sales_cents: total.unwrap_or(0),
+        count,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/sales/stats/week",
+    tag = "Sales",
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get weekly sales stats (Mon-Sun)", body = [DailySales]))
+)]
+pub async fn get_weekly_sales_stats(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<shared::models::DailySales>>, StatusCode> {
+    // Logic: Find the most recent Monday (or today if it's Monday) and query from there.
+    // In SQLite, DATE('now', 'weekday 1') returns the *next* Monday if today is not Monday, 
+    // or today if it is Monday... wait, 'weekday 1' is Sunday in some systems?
+    // SQLite: 0=Sunday, 1=Monday, ..., 6=Saturday.
+    // Date('now', '-6 days', 'weekday 1') allows us to go back to previous monday.
+    
+    // Let's rely on rust-chrono for date calc to be safe and consistent.
+    let now = Utc::now().date_naive();
+    let days_since_monday = now.weekday().num_days_from_monday();
+    let start_date = now - chrono::Duration::days(days_since_monday as i64); // This Monday
+    
+    let rows = sqlx::query(
+        "SELECT date(date_of_sale) as day, SUM(total_resolved) as total, COUNT(*) as count 
+         FROM sales 
+         WHERE date(date_of_sale) >= date(?) 
+         GROUP BY day 
+         ORDER BY day ASC",
+    )
+    .bind(start_date.to_string())
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    let mut daily_sales = Vec::new();
+    
+    // We want to fill in gaps if no sales on a specific day?
+    // User requirement: "line chart of sales over the last n days of the week, today inclusive. Assume the week starts on Mondays."
+    // So if today is Wed, we want Mon, Tue, Wed.
+    
+    let mut current_date = start_date;
+    let today = now;
+    
+    // Create map for easy lookup
+    use std::collections::HashMap;
+    let mut sales_map: HashMap<String, (i64, i64)> = HashMap::new(); // (total, count)
+    for row in rows {
+        let day: String = row.try_get("day").unwrap_or_default();
+        let total: i64 = row.try_get("total").unwrap_or(0);
+        let count: i64 = row.try_get("count").unwrap_or(0);
+        sales_map.insert(day, (total, count));
+    }
+
+    while current_date <= today {
+        let date_str = current_date.to_string();
+        let (total, count) = *sales_map.get(&date_str).unwrap_or(&(0, 0));
+        daily_sales.push(shared::models::DailySales {
+            date: date_str,
+            total_sales_cents: total,
+            count,
+        });
+        current_date = current_date.succ_opt().unwrap();
+    }
+
+    Ok(Json(daily_sales))
 }
 
 #[utoipa::path(
@@ -590,14 +886,18 @@ pub async fn delete_sale(
     }
 }
 
-fn is_valid_date_of_birth(value: &str) -> bool {
-    NaiveDate::parse_from_str(value, "%d-%m-%Y").is_ok()
-}
+
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 pub struct AuthRequest {
     pub username: String,
     pub password: String,
+}
+
+#[derive(utoipa::ToSchema)]
+pub struct FileUpload {
+    #[schema(value_type = String, format = Binary)]
+    pub file: Vec<u8>,
 }
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
@@ -652,6 +952,27 @@ pub async fn login(
         token_type: "Bearer".to_string(),
         expires_in,
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/profile",
+    tag = "Auth",
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get current user profile", body = Staff))
+)]
+pub async fn get_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Staff>, StatusCode> {
+    let staff_id = claims.sub;
+    let staff = sqlx::query("SELECT * FROM staff WHERE staff_id = ?")
+        .bind(staff_id)
+        .map(|row: SqliteRow| staff_from_row(&row))
+        .fetch_one(&state.db)
+        .await
+        .map_err(map_db_err)?;
+    Ok(Json(staff))
 }
 
 #[utoipa::path(
@@ -854,6 +1175,7 @@ fn customer_from_row(row: &SqliteRow) -> Result<Customer, StatusCode> {
         mobile_number: row.get("mobile_number"),
         date_of_birth: row.get("date_of_birth"),
         email: row.get("email"),
+        details: vec![],
     })
 }
 
@@ -914,4 +1236,38 @@ fn verify_password(password: &str, pepper: &str, stored: &str) -> Result<bool, S
     Ok(argon2
         .verify_password(salted.as_bytes(), &parsed)
         .is_ok())
+}
+
+
+
+#[utoipa::path(
+    post,
+    path = "/api/upload",
+    tag = "Utility",
+    request_body(content = FileUpload, content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "File uploaded", body = UploadResponse),
+        (status = 400, description = "Bad Request")
+    )
+)]
+pub async fn upload_file(mut multipart: axum::extract::Multipart) -> Result<Json<UploadResponse>, StatusCode> {
+    while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
+        let file_name = field.file_name().unwrap_or("file").to_string();
+        
+        if let Some(ext) = std::path::Path::new(&file_name).extension().and_then(|s| s.to_str()) {
+             let data = field.bytes().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+             
+             let new_filename = format!("{}.{}", Uuid::new_v4(), ext);
+             let upload_dir = "uploads";
+             tokio::fs::create_dir_all(upload_dir).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+             
+             let filepath = std::path::Path::new(upload_dir).join(&new_filename);
+             tokio::fs::write(&filepath, data).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+             
+             return Ok(Json(UploadResponse {
+                 url: format!("/uploads/{}", new_filename),
+             }));
+        }
+    }
+    Err(StatusCode::BAD_REQUEST)
 }

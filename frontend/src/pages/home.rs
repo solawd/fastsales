@@ -1,36 +1,57 @@
 use leptos::*;
 use crate::components::layout::DashboardLayout;
-use shared::models::Product;
+use shared::models::{Product, SalesStats};
 
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+use crate::utils::CURRENCY;
+
 #[component]
 pub fn DashboardPage() -> impl IntoView {
-    #[allow(unused_variables)]
-    let (products, set_products) = create_signal(Vec::<Product>::new());
+    let (today_sales, set_today_sales) = create_signal(SalesStats::default());
+    let (weekly_sales, set_weekly_sales) = create_signal(Vec::<shared::models::DailySales>::new());
     
-    // Auto-fetch products on load (mocking the authenticated state for now, 
-    // real app would need token persistence)
+    let navigate = leptos_router::use_navigate();
+
     create_effect(move |_| {
+        let navigate = navigate.clone();
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
-            // NOTE: This will fail if not authenticated (token missing). 
-            // Since we didn't persist token in login, this is a known limitation of this simple refactor.
-            // Ideally we'd move fetching to a resource or context.
-            // For now, let's just attempt fetch - if 401, user sees empty.
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            if let Ok(resp) = Request::get("/api/products")
+            
+            // Fetch Today's Stats
+            if let Ok(resp) = Request::get("/api/sales/stats/today")
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
-                 if let Ok(items) = resp.json::<Vec<Product>>().await {
-                     set_products.set(items);
+                 if resp.status() == 401 {
+                     navigate("/", Default::default());
+                     return;
+                 }
+                 if let Ok(stats) = resp.json::<SalesStats>().await {
+                     set_today_sales.set(stats);
+                 }
+            }
+
+            // Fetch Weekly Stats
+            if let Ok(resp) = Request::get("/api/sales/stats/week")
+                .header("Authorization", &format!("Bearer {}", token))
+                .send().await {
+                 if resp.status() == 401 {
+                     navigate("/", Default::default());
+                     return;
+                 }
+                 if let Ok(stats) = resp.json::<Vec<shared::models::DailySales>>().await {
+                     set_weekly_sales.set(stats);
                  }
             }
         });
     });
+
+    // Helper to format currency
+    let format_currency = |cents: i64| format!("{}{:.2}", CURRENCY, cents as f64 / 100.0);
 
     view! {
         <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -40,40 +61,186 @@ pub fn DashboardPage() -> impl IntoView {
             </div>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                // Total Sales Today Card
                 <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                         <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">"Total Products"</h3>
-                         <span style="font-size: 1.5rem;">"📦"</span>
+                         <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">"Total Sales Today"</h3>
+                         <span style="font-size: 1.5rem;">"💰"</span>
                     </div>
                     <p style="font-size: 2.5rem; font-weight: 700; color: var(--brand-dark); line-height: 1;">
-                        {move || products.get().len()}
+                        {move || format_currency(today_sales.get().total_sales_cents)}
                     </p>
                 </div>
+                
+                 // Total Sales Count Today Card (Bonus?) - reusing the space since products count is gone?
+                 // Let's just keep today's sales for now as requested.
             </div>
              
-             <div style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-                <For
-                    each=move || products.get()
-                    key=|product| product.id
-                    children=move |product| view! {
-                        <div style="padding: 1.5rem; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; display: flex; flex-direction: column; gap: 0.5rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: start;">
-                                <h3 style="font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--text-base);">{product.name}</h3>
-                                <span style="background: var(--brand-light); color: var(--brand-primary); padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">{product.product_type.as_str()}</span>
+            // Chart Section
+            <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); margin-top: 1rem;">
+                <h3 style="font-size: 1.25rem; font-weight: 600; color: var(--text-heading); margin-bottom: 2rem;">"Weekly Sales Trend"</h3>
+                
+                <div style="width: 100%; height: 400px; position: relative; padding-bottom: 20px;">
+                    {move || {
+                        let data = weekly_sales.get();
+                        let days_labels = vec!["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                        
+                        // Always calculate max based on available data, default to 100 if empty
+                        let max_sales = data.iter().map(|d| d.total_sales_cents).max().unwrap_or(100) as f64;
+                        let max_sales = if max_sales == 0.0 { 100.0 } else { max_sales };
+
+                        let max_count = data.iter().map(|d| d.count).max().unwrap_or(10) as f64;
+                        let max_count = if max_count == 0.0 { 10.0 } else { max_count };
+
+                        // Map data to coordinates
+                        // X axis: 5 to 95 (7 data points) -> 5% margin on each side
+                        let get_x = |i: usize| 5.0 + (i as f64 / 6.0) * 90.0;
+                        let get_y_sales = |val: i64| 100.0 - ((val as f64 / max_sales) * 80.0);
+                        let get_y_count = |val: i64| 100.0 - ((val as f64 / max_count) * 80.0);
+
+                        let sales_points: Vec<(f64, f64)> = data.iter().enumerate().map(|(i, d)| {
+                            (get_x(i), get_y_sales(d.total_sales_cents))
+                        }).collect();
+
+                        let count_points: Vec<(f64, f64)> = data.iter().enumerate().map(|(i, d)| {
+                            (get_x(i), get_y_count(d.count))
+                        }).collect();
+
+                        // Helper to generate smoothed path
+                        let generate_smooth_path = |points: &Vec<(f64, f64)>| -> String {
+                            if points.len() < 2 {
+                                String::new()
+                            } else {
+                                let mut d = format!("M {:.2},{:.2}", points[0].0, points[0].1);
+                                for i in 0..points.len()-1 {
+                                    let p0 = if i > 0 { points[i-1] } else { points[i] };
+                                    let p1 = points[i];
+                                    let p2 = points[i+1];
+                                    let p3 = if i + 2 < points.len() { points[i+2] } else { p2 };
+
+                                    let cp1x = p1.0 + (p2.0 - p0.0) / 6.0;
+                                    let cp1y = p1.1 + (p2.1 - p0.1) / 6.0;
+
+                                    let cp2x = p2.0 - (p3.0 - p1.0) / 6.0;
+                                    let cp2y = p2.1 - (p3.1 - p1.1) / 6.0;
+
+                                    d.push_str(&format!(" C {:.2},{:.2} {:.2},{:.2} {:.2},{:.2}", cp1x, cp1y, cp2x, cp2y, p2.0, p2.1));
+                                }
+                                d
+                            }
+                        };
+
+                        let sales_path_d = generate_smooth_path(&sales_points);
+                        let count_path_d = generate_smooth_path(&count_points);
+                        
+                        // Close path for fill (Sales only, to keep it clean)
+                        let sales_fill_d = if !sales_points.is_empty() {
+                            format!("{} L {:.2},100 L {:.2},100 Z", sales_path_d, sales_points.last().unwrap().0, sales_points.first().unwrap().0)
+                        } else {
+                            String::new()
+                        };
+
+                        view! {
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
+                                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-primary);"></span>
+                                    {format!("Total Sales ({})", CURRENCY)}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);">
+                                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span>
+                                    "Sales Count (#)"
+                                </div>
                             </div>
-                            <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; flex: 1;">{product.description}</p>
-                            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: 700; color: var(--brand-dark); font-size: 1.25rem;">
-                                    {format!("${:.2}", product.price_cents as f64 / 100.0)}
-                                </span>
-                                <span style="font-size: 0.9rem; color: var(--text-muted);">
-                                    {product.stock} " items"
-                                </span>
-                            </div>
-                        </div>
-                    }
-                />
-             </div>
+
+                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="overflow: visible;">
+                                // Gradient Definition
+                                <defs>
+                                    <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+                                        <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.1"/>
+                                        <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0"/>
+                                    </linearGradient>
+                                </defs>
+                                
+                                // Grid lines
+                                {
+                                    (0..=4).map(|i| {
+                                        let y = 20.0 + (i as f64 * 20.0);
+                                        view! {
+                                            <line x1="0" y1=y x2="100" y2=y stroke="var(--border-subtle)" stroke-width="0.5" stroke-dasharray="2" />
+                                        }
+                                    }).collect::<Vec<_>>()
+                                }
+                                
+                                // Sales Area Fill
+                                <path d=sales_fill_d fill="url(#chartGradient)" />
+
+                                // Sales Line (Primary)
+                                <path 
+                                    d=sales_path_d 
+                                    fill="none" 
+                                    stroke="var(--brand-primary)" 
+                                    stroke-width="2" 
+                                    vector-effect="non-scaling-stroke"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                />
+
+                                // Count Line (Secondary - Orange/Amber)
+                                <path 
+                                    d=count_path_d 
+                                    fill="none" 
+                                    stroke="#f59e0b" 
+                                    stroke-width="2" 
+                                    vector-effect="non-scaling-stroke"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                />
+                                
+                                // Data Points & Labels (Combined to avoid overlapping logic for now, or just render count on top?)
+                                
+                                // Sales Points (Primary)
+                                {sales_points.into_iter().enumerate().map(|(i, (x, y))| {
+                                     let val = data[i].total_sales_cents;
+                                     view! {
+                                        <g>
+                                            <circle cx=x cy=y r="1.5" fill="white" stroke="var(--brand-primary)" stroke-width="0.5" />
+                                            <text x=x y=format!("{:.2}", y - 5.0) font-size="3" text-anchor="middle" fill="var(--brand-dark)" font-weight="600">
+                                                {format!("{}{}", CURRENCY, val / 100)}
+                                            </text>
+                                        </g>
+                                     }
+                                }).collect::<Vec<_>>()}
+
+                                // Count Points (Secondary)
+                                {count_points.into_iter().enumerate().map(|(i, (x, y))| {
+                                     let val = data[i].count;
+                                     view! {
+                                        <g>
+                                            <circle cx=x cy=y r="1.5" fill="white" stroke="#f59e0b" stroke-width="0.5" />
+                                            // Place count label slightly below point if it's high up, or check collision? 
+                                            // For simplicity, let's put it above too but maybe with different style or offset if they overlap.
+                                            // Let's put count labels slightly higher offset to try to avoid collision, or use color
+                                            <text x=x y=format!("{:.2}", y - 8.0) font-size="3" text-anchor="middle" fill="#d97706" font-weight="600"> // Darker orange text
+                                                {format!("#{}", val)}
+                                            </text>
+                                        </g>
+                                     }
+                                }).collect::<Vec<_>>()}
+
+                                // X-Axis Labels (All 7 days)
+                                {days_labels.into_iter().enumerate().map(|(i, label)| {
+                                    let x = 5.0 + (i as f64 / 6.0) * 90.0;
+                                    view! {
+                                        <text x=x y="108" font-size="3" text-anchor="middle" fill="var(--text-muted)">
+                                            {label}
+                                        </text>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </svg>
+                        }
+                    }}
+                </div>
+            </div>
         </div>
     }
 }

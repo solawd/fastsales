@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use utoipa::ToSchema;
@@ -75,8 +75,10 @@ pub struct Customer {
     pub last_name: String,
     pub middle_name: Option<String>,
     pub mobile_number: String,
-    pub date_of_birth: String,
+    pub date_of_birth: NaiveDate,
     pub email: String,
+    #[schema(no_recursion)]
+    pub details: Vec<CustomerDetails>,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -85,8 +87,28 @@ pub struct CustomerInput {
     pub last_name: String,
     pub middle_name: Option<String>,
     pub mobile_number: String,
-    pub date_of_birth: String,
+    pub date_of_birth: NaiveDate,
     pub email: String,
+    #[schema(no_recursion)]
+    pub details: Vec<CustomerDetailsInput>,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct CustomerDetails {
+    pub customer_id: Uuid,
+    pub detail_name: String,
+    pub detail_value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct CustomerDetailsInput {
+    pub detail_name: String,
+    pub detail_value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct UploadResponse {
+    pub url: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
@@ -136,4 +158,23 @@ pub struct StaffInput {
     pub staff_id: String,
     pub username: String,
     pub password: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Clone, Default)]
+pub struct SalesStats {
+    pub total_sales_cents: i64,
+    pub count: i64,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+pub struct DailySales {
+    pub date: String, // YYYY-MM-DD
+    pub total_sales_cents: i64,
+    pub count: i64,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct SalesListResponse {
+    pub sales: Vec<Sale>,
+    pub total_sales_period_cents: i64,
 }

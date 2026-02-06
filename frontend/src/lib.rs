@@ -5,6 +5,7 @@ use leptos_router::{Route, Router, Routes};
 pub mod components;
 use components::layout::DashboardLayout;
 pub mod pages;
+pub mod utils;
 
 use pages::login::LoginPage;
 use pages::home::DashboardPage;
@@ -12,6 +13,7 @@ use pages::products::{ProductListPage, ProductEditPage};
 use pages::sales::{SalesListPage, SalesEditPage};
 use pages::customers::{CustomersListPage, CustomerEditPage};
 use pages::staff::{StaffListPage, StaffEditPage};
+use pages::profile::ProfilePage;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -27,6 +29,7 @@ pub fn App() -> impl IntoView {
                     <Route path="/" view=LoginPage/>
                     <Route path="" view=DashboardLayout>
                         <Route path="/dashboard" view=DashboardPage/>
+                        <Route path="/profile" view=ProfilePage/>
                         <Route path="/products" view=ProductListPage/>
                         <Route path="/products/create" view=ProductEditPage/>
                         <Route path="/products/:id" view=ProductEditPage/>

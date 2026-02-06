@@ -1,7 +1,8 @@
 use leptos::*;
 use leptos_router::*;
-use shared::models::{Customer, CustomerInput};
+use shared::models::{Customer, CustomerInput, CustomerDetailsInput};
 use uuid::Uuid;
+use chrono::NaiveDate;
 
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
@@ -12,6 +13,7 @@ use wasm_bindgen_futures::spawn_local;
 pub fn CustomersListPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (customers, set_customers) = create_signal(Vec::<Customer>::new());
+    let (search_query, set_search_query) = create_signal(String::new());
     
     let navigate = use_navigate();
 
@@ -20,7 +22,13 @@ pub fn CustomersListPage() -> impl IntoView {
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            if let Ok(res) = Request::get("/api/customers")
+            
+            let mut url = "/api/customers".to_string();
+            if !search_query.get().is_empty() {
+                url.push_str(&format!("?search={}", search_query.get()));
+            }
+
+            if let Ok(res) = Request::get(&url)
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                 
@@ -43,19 +51,22 @@ pub fn CustomersListPage() -> impl IntoView {
         }
     });
 
-    let delete_action = move |id: Uuid| {
-        #[allow(unused_variables)]
-        let id = id;
-        let fetch_customers = fetch_customers.clone(); // Clone for async block
-        #[cfg(target_arch = "wasm32")]
-        spawn_local(async move {
-            let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
-            let _ = Request::delete(&format!("/api/customers/{}", id))
-                .header("Authorization", &format!("Bearer {}", token))
-                .send()
-                .await;
-            fetch_customers();
-        });
+    let delete_action = {
+        let fetch_customers = fetch_customers.clone();
+        move |id: Uuid| {
+            let fetch_customers = fetch_customers.clone();
+            #[allow(unused_variables)]
+            let id = id;
+            #[cfg(target_arch = "wasm32")]
+            spawn_local(async move {
+                let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
+                let _ = Request::delete(&format!("/api/customers/{}", id))
+                    .header("Authorization", &format!("Bearer {}", token))
+                    .send()
+                    .await;
+                fetch_customers();
+            });
+        }
     };
 
     view! {
@@ -65,6 +76,34 @@ pub fn CustomersListPage() -> impl IntoView {
                 <A href="/customers/create" class="btn-primary" attr:style="margin-left: auto; text-decoration: none; display: inline-block; padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); font-weight: 600;">
                     "Add Customer"
                 </A>
+            </div>
+
+            <div style="margin-bottom: 2rem; display: flex; gap: 1rem;">
+                 <input 
+                    type="text" 
+                    placeholder="Search customers..."
+                    prop:value=search_query
+                    on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                    on:keydown={
+                        let fetch_customers = fetch_customers.clone();
+                        move |ev| {
+                            if ev.key() == "Enter" {
+                                fetch_customers();
+                            }
+                        }
+                    }
+                    style="width: 40%;"
+                />
+                <button 
+                    class="btn-primary"
+                    on:click={
+                        let fetch_customers = fetch_customers.clone();
+                        move |_| fetch_customers()
+                    }
+                    style="padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer;"
+                >
+                    "Search"
+                </button>
             </div>
 
             <div style="overflow-x: auto; background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
@@ -90,7 +129,7 @@ pub fn CustomersListPage() -> impl IntoView {
                                         <td style="padding: 1rem;">{format!("{} {}", customer.first_name, customer.last_name)}</td>
                                         <td style="padding: 1rem;">{customer.email}</td>
                                         <td style="padding: 1rem;">{customer.mobile_number}</td>
-                                        <td style="padding: 1rem;">{customer.date_of_birth}</td>
+                                        <td style="padding: 1rem;">{customer.date_of_birth.format("%d-%m-%Y").to_string()}</td>
                                         <td style="padding: 1rem; display: flex; gap: 0.5rem;">
                                             <A href=format!("/customers/{}", customer.id) attr:style="color: var(--brand-primary); text-decoration: none; font-weight: 500;">"Edit"</A>
                                             <button 
@@ -128,6 +167,11 @@ pub fn CustomerEditPage() -> impl IntoView {
     let (email, set_email) = create_signal(String::new());
     let (mobile_number, set_mobile_number) = create_signal(String::new());
     let (date_of_birth, set_date_of_birth) = create_signal(String::new());
+    
+    // Details State
+    let (details, set_details) = create_signal(Vec::<CustomerDetailsInput>::new());
+    let (new_detail_name, set_new_detail_name) = create_signal(String::new());
+    let (new_detail_value, set_new_detail_value) = create_signal(String::new());
 
     #[allow(unused_variables)]
     let navigate = use_navigate();
@@ -137,7 +181,7 @@ pub fn CustomerEditPage() -> impl IntoView {
         let navigate = navigate.clone();
         move |_| {
             let current_id = id();
-            let navigate = navigate.clone(); // Clone for async block
+            let navigate = navigate.clone();
             if current_id != "create" && !current_id.is_empty() {
                 #[cfg(target_arch = "wasm32")]
                 spawn_local(async move {
@@ -157,13 +201,32 @@ pub fn CustomerEditPage() -> impl IntoView {
                             set_middle_name.set(customer.middle_name.unwrap_or_default());
                             set_email.set(customer.email);
                             set_mobile_number.set(customer.mobile_number);
-                            set_date_of_birth.set(customer.date_of_birth);
+                            set_date_of_birth.set(customer.date_of_birth.to_string());
+                            
+                            // Map Details
+                            let mapped_details = customer.details.into_iter().map(|d| CustomerDetailsInput {
+                                detail_name: d.detail_name,
+                                detail_value: d.detail_value,
+                            }).collect();
+                            set_details.set(mapped_details);
                         }
                     }
                 });
             }
         }
     });
+    
+    let add_detail = move |_| {
+        let name = new_detail_name.get();
+        let value = new_detail_value.get();
+        if !name.is_empty() && !value.is_empty() {
+            set_details.update(|d| d.push(CustomerDetailsInput { detail_name: name, detail_value: value }));
+            set_new_detail_name.set(String::new());
+            set_new_detail_value.set(String::new());
+        }
+    };
+
+
 
     let save_customer = move |_| {
         #[allow(unused_variables)]
@@ -178,7 +241,8 @@ pub fn CustomerEditPage() -> impl IntoView {
             },
             email: email.get(),
             mobile_number: mobile_number.get(),
-            date_of_birth: date_of_birth.get(),
+            date_of_birth: NaiveDate::parse_from_str(&date_of_birth.get(), "%Y-%m-%d").unwrap_or_default(),
+            details: details.get(),
         };
         
         #[allow(unused_mut)]
@@ -210,8 +274,11 @@ pub fn CustomerEditPage() -> impl IntoView {
                 </h1>
             </div>
 
-            <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); max-width: 600px;">
-                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                // Left Column: Customer Information
+                <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
+                     <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-heading);">"Customer Information"</h2>
+                     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
                     
                     <div style="display: flex; gap: 1rem;">
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -220,7 +287,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="text" 
                                 prop:value=first_name
                                 on:input=move |ev| set_first_name.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
@@ -229,7 +295,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="text" 
                                 prop:value=last_name
                                 on:input=move |ev| set_last_name.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
@@ -240,7 +305,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                             type="text" 
                             prop:value=middle_name
                             on:input=move |ev| set_middle_name.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
 
@@ -250,7 +314,6 @@ pub fn CustomerEditPage() -> impl IntoView {
                             type="email" 
                             prop:value=email
                             on:input=move |ev| set_email.set(event_target_value(&ev))
-                            style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                         />
                     </div>
 
@@ -261,29 +324,99 @@ pub fn CustomerEditPage() -> impl IntoView {
                                 type="tel" 
                                 prop:value=mobile_number
                                 on:input=move |ev| set_mobile_number.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-                            <label style="font-weight: 500;">"Date of Birth (DD-MM-YYYY)"</label>
+                            <label style="font-weight: 500;">"Date of Birth"</label>
                             <input 
-                                type="text"
-                                placeholder="DD-MM-YYYY" 
+                                type="date"
                                 prop:value=date_of_birth
                                 on:input=move |ev| set_date_of_birth.set(event_target_value(&ev))
-                                style="padding: 0.75rem; border: 1px solid var(--border-input); border-radius: var(--radius-md);"
                             />
                         </div>
                     </div>
-
-                    <button 
-                        on:click=save_customer
-                        class="btn-primary" 
-                        style="margin-top: 1rem; padding: 0.75rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); font-weight: 600; border: none; cursor: pointer;"
-                    >
-                        "Save Customer"
-                    </button>
+                    </div>
                 </div>
+                
+                 // Right Column: Customer Details
+                <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); display: flex; flex-direction: column;">
+                    <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-heading);">"Additional Details"</h2>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 1rem; flex: 1;">
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input
+                                type="text"
+                                placeholder="Detail Name (e.g. Loyalty ID)"
+                                prop:value=new_detail_name
+                                on:input=move |ev| set_new_detail_name.set(event_target_value(&ev))
+                                style="flex: 1;"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Value"
+                                prop:value=new_detail_value
+                                on:input=move |ev| set_new_detail_value.set(event_target_value(&ev))
+                                style="flex: 1;"
+                            />
+                            <button
+                                on:click=add_detail
+                                class="btn-primary"
+                                style="padding: 0.75rem 1rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); font-weight: 600; border: none; cursor: pointer;"
+                            >
+                                "Add"
+                            </button>
+                        </div>
+                        
+                        <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                             <For
+                                each=move || details.get()
+                                key=|detail| (detail.detail_name.clone(), detail.detail_value.clone())
+                                children=move |detail| {
+                                    // Need to capture index for deletion, but For uses keyed items. 
+                                    // A simple way is to iterate with index in the view or finding index.
+                                    // NOTE: Because removing by index from a signal inside For is tricky without index signal,
+                                    // We can just rely on state refresh or use a better key.
+                                    // For simplicity, we'll iterate the list to find index or just filter.
+                                    // Actually, let's use a computed list with indices if needed, but for now simple view:
+                                    let d_name = detail.detail_name.clone();
+                                    
+                                    view! {
+                                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: var(--bg-subtle); border-radius: var(--radius-md);">
+                                            <div>
+                                                <span style="font-weight: 600; margin-right: 0.5rem;">{detail.detail_name}:</span>
+                                                <span>{detail.detail_value}</span>
+                                            </div>
+                                            <button
+                                                on:click=move |_| {
+                                                    // Find index
+                                                    set_details.update(|d| {
+                                                        if let Some(pos) = d.iter().position(|x| x.detail_name == d_name) {
+                                                            d.remove(pos);
+                                                        }
+                                                    });
+                                                }
+                                                style="background: none; border: none; color: var(--state-error); cursor: pointer; font-size: 1.2rem; line-height: 1;"
+                                                title="Remove"
+                                            >
+                                                "×"
+                                            </button>
+                                        </div>
+                                    }
+                                }
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+                 <button 
+                    on:click=save_customer
+                    class="btn-primary" 
+                    style="padding: 1rem 2rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); font-weight: 600; border: none; cursor: pointer; font-size: 1rem;"
+                >
+                    "Save Customer"
+                </button>
             </div>
         </div>
     }

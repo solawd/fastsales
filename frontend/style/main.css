@@ -76,3 +76,69 @@ h6 {
     color: var(--brand-dark);
     font-weight: 600;
 }
+
+/* Logout Button */
+.logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    font-size: 1rem;
+    font-family: var(--font-body);
+}
+
+.logout-btn:hover {
+    background-color: rgba(30, 58, 47, 0.05);
+    color: var(--brand-dark);
+}
+
+/* Forms & Inputs */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="date"],
+textarea,
+select {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--text-main);
+    background-color: var(--bg-surface);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    outline: none;
+    width: 100%;
+    /* Ensure they take full width of container by default */
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 2px rgba(30, 58, 47, 0.1);
+    /* Subtle ring using brand-dark-rgb */
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #9CA3AF;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-main);
+}

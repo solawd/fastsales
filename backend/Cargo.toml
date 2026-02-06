@@ -6,8 +6,10 @@ edition = "2024"
 [dependencies]
 frontend = { path = "../frontend", features = ["ssr"] }
 shared = { path = "../shared" }
-axum = "0.7"
+axum = { version = "0.7", features = ["multipart"] }
 serde = { version = "1", features = ["derive"] }
+# ...
+tower-http = { version = "0.5", features = ["fs", "cors"] }
 
 
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -24,6 +26,4 @@ leptos_axum = "0.6"
 leptos_config = "0.6"
 leptos_meta = { version = "0.6", features = ["ssr"] }
 leptos_router = { version = "0.6", features = ["ssr"] }
-tower-http = { version = "0.5", features = ["fs"] }
 serde_json = "1"
-

@@ -12,13 +12,7 @@ pub fn Input(
     let container_style = "display: flex; flex-direction: column; gap: 0.5rem; width: 100%;";
     let label_style = "font-weight: 500; font-size: 0.9rem; color: var(--text-muted);";
     let input_style = "
-        padding: 0.8rem 1rem;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border-subtle);
-        font-size: 1rem;
         width: 100%;
-        background: var(--bg-surface);
-        transition: border-color 0.2s;
     ";
 
     view! {
