@@ -25,13 +25,18 @@ use crate::auth::Claims;
 use shared::models::{
     Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
     Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesListResponse,
+    TopProduct,
 };
 
 #[derive(Deserialize)]
 pub struct SalesSearchParams {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
 }
+
+
 
 #[derive(Deserialize)]
 pub struct SearchParams {
@@ -616,10 +621,19 @@ pub async fn list_sales(
     // Sort by date descending
     query.push_str(" ORDER BY date_of_sale DESC");
 
+    // Pagination
+    let limit = params.limit.unwrap_or(20);
+    // page defaults to 1
+    let page = params.page.unwrap_or(1);
+    let offset = (page - 1) * limit;
+
+    query.push_str(" LIMIT ? OFFSET ?");
+    
     let mut sql_query = sqlx::query(&query);
     for arg in &args {
         sql_query = sql_query.bind(arg);
     }
+    sql_query = sql_query.bind(limit).bind(offset);
 
     let rows = sql_query
     .fetch_all(&state.db)
@@ -797,20 +811,101 @@ pub async fn get_weekly_sales_stats(
         let count: i64 = row.try_get("count").unwrap_or(0);
         sales_map.insert(day, (total, count));
     }
-
-    while current_date <= today {
-        let date_str = current_date.to_string();
-        let (total, count) = *sales_map.get(&date_str).unwrap_or(&(0, 0));
+    
+    // Fill the last 7 days (or N days)
+    // Actually the requirement is just last week dynamics.
+    // Let's iterate from start_date to today.
+    
+    let mut current_iter = start_date;
+    while current_iter <= today {
+        let day_str = current_iter.to_string();
+        let (total, count) = sales_map.get(&day_str).unwrap_or(&(0, 0));
         daily_sales.push(shared::models::DailySales {
-            date: date_str,
-            total_sales_cents: total,
-            count,
+            date: day_str,
+            total_sales_cents: *total,
+            count: *count,
         });
-        current_date = current_date.succ_opt().unwrap();
+        current_iter = current_iter + chrono::Duration::days(1);
     }
 
     Ok(Json(daily_sales))
 }
+
+#[derive(Deserialize)]
+pub struct StatsRangeParams {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/sales/stats/top_products",
+    tag = "Sales",
+    params(
+        ("start_date" = Option<String>, Query, description = "Start date YYYY-MM-DD"),
+        ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
+    ),
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get top products stats", body = [TopProduct]))
+)]
+pub async fn get_top_products(
+    State(state): State<AppState>,
+    Query(params): Query<StatsRangeParams>,
+) -> Result<Json<Vec<TopProduct>>, StatusCode> {
+    let mut query = "
+        SELECT p.name as product_name, SUM(s.total_resolved) as total 
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+    ".to_string();
+    
+    let mut conditions = Vec::new();
+    let mut args = Vec::new();
+
+    if let Some(start) = &params.start_date {
+        if !start.is_empty() {
+            conditions.push("date(s.date_of_sale) >= date(?)");
+            args.push(start.clone());
+        }
+    }
+    
+    if let Some(end) = &params.end_date {
+        if !end.is_empty() {
+             conditions.push("date(s.date_of_sale) <= date(?)");
+             args.push(end.clone());
+        }
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    
+    query.push_str(" GROUP BY p.name ORDER BY total DESC LIMIT 20");
+
+    let mut sql_query = sqlx::query(&query);
+    for arg in &args {
+        sql_query = sql_query.bind(arg);
+    }
+
+    let rows = sql_query
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        let product_name: String = row.try_get("product_name").unwrap_or_default();
+        let total: i64 = row.try_get("total").unwrap_or(0);
+        results.push(TopProduct {
+            product_name,
+            total_sales_cents: total,
+        });
+    }
+
+    Ok(Json(results))
+}
+
+
 
 #[utoipa::path(
     put,

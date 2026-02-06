@@ -1,11 +1,11 @@
 :root {
     /* Brand Colors */
-    --brand-dark: #1E3A2F;
-    /* Deep Forest Green */
-    --brand-dark-rgb: 30, 58, 47;
-    --brand-primary: #C1E33D;
-    /* Vibrant Lime */
-    --brand-primary-hover: #D1EF5E;
+    --brand-dark: #052850;
+    /* Deep Navy Blue */
+    --brand-dark-rgb: 5, 40, 80;
+    --brand-primary: #69BEEB;
+    /* Sky Blue */
+    --brand-primary-hover: #85C8F2;
 
     /* UI Semantic Colors */
     --bg-page: #F4F7F6;

@@ -23,6 +23,7 @@ use handlers::{
     delete_sale, delete_staff, get_customer, get_product, get_sale, get_staff, list_customers,
     list_products, list_sales, list_staff, update_customer, update_product, update_sale,
     update_staff, login, upload_file, get_profile, get_today_sales, get_weekly_sales_stats,
+    get_top_products,
 };
 use auth::auth_middleware;
 use sqlx::SqlitePool;
@@ -169,12 +170,13 @@ async fn main() {
             get(get_customer).put(update_customer).delete(delete_customer),
         )
         .route("/sales", get(list_sales).post(create_sale))
+        .route("/sales/stats/today", get(get_today_sales))
+        .route("/sales/stats/week", get(get_weekly_sales_stats))
+        .route("/sales_stats/top_products", get(get_top_products))
         .route(
             "/sales/:id",
             get(get_sale).put(update_sale).delete(delete_sale),
         )
-        .route("/sales/stats/today", get(get_today_sales))
-        .route("/sales/stats/week", get(get_weekly_sales_stats))
         .route("/staff", get(list_staff).post(create_staff))
         .route(
             "/staff/:id",

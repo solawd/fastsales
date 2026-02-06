@@ -80,7 +80,7 @@ pub fn DashboardPage() -> impl IntoView {
             <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); margin-top: 1rem;">
                 <h3 style="font-size: 1.25rem; font-weight: 600; color: var(--text-heading); margin-bottom: 2rem;">"Weekly Sales Trend"</h3>
                 
-                <div style="width: 100%; height: 400px; position: relative; padding-bottom: 20px;">
+                <div style="width: 100%; height: 400px; position: relative;">
                     {move || {
                         let data = weekly_sales.get();
                         let days_labels = vec!["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -152,91 +152,98 @@ pub fn DashboardPage() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="overflow: visible;">
-                                // Gradient Definition
-                                <defs>
-                                    <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
-                                        <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.1"/>
-                                        <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0"/>
-                                    </linearGradient>
-                                </defs>
-                                
-                                // Grid lines
-                                {
-                                    (0..=4).map(|i| {
-                                        let y = 20.0 + (i as f64 * 20.0);
-                                        view! {
-                                            <line x1="0" y1=y x2="100" y2=y stroke="var(--border-subtle)" stroke-width="0.5" stroke-dasharray="2" />
-                                        }
-                                    }).collect::<Vec<_>>()
-                                }
-                                
-                                // Sales Area Fill
-                                <path d=sales_fill_d fill="url(#chartGradient)" />
+                            <div style="position: relative; width: 100%; height: 100%;">
+                                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="overflow: visible; position: absolute; top: 0; left: 0;">
+                                    // Gradient Definition
+                                    <defs>
+                                        <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+                                            <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.1"/>
+                                            <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+                                    
+                                    // Grid lines
+                                    {
+                                        (0..=4).map(|i| {
+                                            let y = 20.0 + (i as f64 * 20.0);
+                                            view! {
+                                                <line x1="0" y1=y x2="100" y2=y stroke="var(--border-subtle)" stroke-width="0.5" stroke-dasharray="2" />
+                                            }
+                                        }).collect::<Vec<_>>()
+                                    }
+                                    
+                                    // Sales Area Fill
+                                    <path d=sales_fill_d fill="url(#chartGradient)" />
 
-                                // Sales Line (Primary)
-                                <path 
-                                    d=sales_path_d 
-                                    fill="none" 
-                                    stroke="var(--brand-primary)" 
-                                    stroke-width="2" 
-                                    vector-effect="non-scaling-stroke"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                />
+                                    // Sales Line (Primary)
+                                    <path 
+                                        d=sales_path_d 
+                                        fill="none" 
+                                        stroke="var(--brand-primary)" 
+                                        stroke-width="2" 
+                                        vector-effect="non-scaling-stroke"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    />
 
-                                // Count Line (Secondary - Orange/Amber)
-                                <path 
-                                    d=count_path_d 
-                                    fill="none" 
-                                    stroke="#f59e0b" 
-                                    stroke-width="2" 
-                                    vector-effect="non-scaling-stroke"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                />
+                                    // Count Line (Secondary - Orange/Amber)
+                                    <path 
+                                        d=count_path_d 
+                                        fill="none" 
+                                        stroke="#f59e0b" 
+                                        stroke-width="2" 
+                                        vector-effect="non-scaling-stroke"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    />
+                                    
+                                    // Points (Circles) - Still inside SVG but they might be ovals. 
+                                    // If we want perfect circles we should move them to HTML or use non-scaling markers (masked).
+                                    // For now, let's keep them here as requested to only fix textual components.
+                                    {sales_points.iter().map(|(x, y)| {
+                                         view! {
+                                            <circle cx=*x cy=*y r="1.5" fill="white" stroke="var(--brand-primary)" stroke-width="0.5" vector-effect="non-scaling-stroke" />
+                                         }
+                                    }).collect::<Vec<_>>()}
+
+                                    {count_points.iter().map(|(x, y)| {
+                                         view! {
+                                            <circle cx=*x cy=*y r="1.5" fill="white" stroke="#f59e0b" stroke-width="0.5" vector-effect="non-scaling-stroke" />
+                                         }
+                                    }).collect::<Vec<_>>()}
+                                </svg>
                                 
-                                // Data Points & Labels (Combined to avoid overlapping logic for now, or just render count on top?)
-                                
-                                // Sales Points (Primary)
+                                // HTML Text Overlays
+                                // Sales Values
                                 {sales_points.into_iter().enumerate().map(|(i, (x, y))| {
                                      let val = data[i].total_sales_cents;
                                      view! {
-                                        <g>
-                                            <circle cx=x cy=y r="1.5" fill="white" stroke="var(--brand-primary)" stroke-width="0.5" />
-                                            <text x=x y=format!("{:.2}", y - 5.0) font-size="3" text-anchor="middle" fill="var(--brand-dark)" font-weight="600">
-                                                {format!("{}{}", CURRENCY, val / 100)}
-                                            </text>
-                                        </g>
+                                        <div style=format!("position: absolute; left: {}%; top: {}%; transform: translate(-50%, -100%); margin-top: -8px; font-size: 0.75rem; font-weight: 600; color: var(--brand-dark); pointer-events: none;", x, y)>
+                                            {format!("{}{}", CURRENCY, val / 100)}
+                                        </div>
                                      }
                                 }).collect::<Vec<_>>()}
 
-                                // Count Points (Secondary)
+                                // Count Values
                                 {count_points.into_iter().enumerate().map(|(i, (x, y))| {
                                      let val = data[i].count;
                                      view! {
-                                        <g>
-                                            <circle cx=x cy=y r="1.5" fill="white" stroke="#f59e0b" stroke-width="0.5" />
-                                            // Place count label slightly below point if it's high up, or check collision? 
-                                            // For simplicity, let's put it above too but maybe with different style or offset if they overlap.
-                                            // Let's put count labels slightly higher offset to try to avoid collision, or use color
-                                            <text x=x y=format!("{:.2}", y - 8.0) font-size="3" text-anchor="middle" fill="#d97706" font-weight="600"> // Darker orange text
-                                                {format!("#{}", val)}
-                                            </text>
-                                        </g>
+                                        <div style=format!("position: absolute; left: {}%; top: {}%; transform: translate(-50%, -100%); margin-top: -12px; font-size: 0.75rem; font-weight: 600; color: #d97706; pointer-events: none;", x, y)>
+                                            {format!("#{}", val)}
+                                        </div>
                                      }
                                 }).collect::<Vec<_>>()}
-
-                                // X-Axis Labels (All 7 days)
+                                
+                                // X-Axis Labels
                                 {days_labels.into_iter().enumerate().map(|(i, label)| {
                                     let x = 5.0 + (i as f64 / 6.0) * 90.0;
                                     view! {
-                                        <text x=x y="108" font-size="3" text-anchor="middle" fill="var(--text-muted)">
+                                        <div style=format!("position: absolute; left: {}%; bottom: -25px; transform: translateX(-50%); font-size: 0.8rem; color: var(--text-muted);", x)>
                                             {label}
-                                        </text>
+                                        </div>
                                     }
                                 }).collect::<Vec<_>>()}
-                            </svg>
+                            </div>
                         }
                     }}
                 </div>
