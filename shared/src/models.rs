@@ -111,7 +111,7 @@ pub struct UploadResponse {
     pub url: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, ToSchema, Debug)]
 pub struct Sale {
     pub id: Uuid,
     pub product_id: Uuid,
@@ -173,8 +173,14 @@ pub struct DailySales {
     pub count: i64,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
 pub struct SalesListResponse {
     pub sales: Vec<Sale>,
     pub total_sales_period_cents: i64,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+pub struct TopProduct {
+    pub product_name: String,
+    pub total_sales_cents: i64,
 }
