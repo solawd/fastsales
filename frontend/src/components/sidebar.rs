@@ -4,13 +4,13 @@ use leptos_router::{A, use_location, use_navigate};
 #[component]
 pub fn Sidebar() -> impl IntoView {
     let location = use_location();
-    let navigate = use_navigate();
+    let _navigate = use_navigate();
     
     let handle_logout = move |_| {
         #[cfg(target_arch = "wasm32")]
         {
             let _ = window().local_storage().unwrap().unwrap().remove_item("jwt_token");
-            navigate("/", Default::default());
+            _navigate("/", Default::default());
         }
     };
     let sidebar_style = "

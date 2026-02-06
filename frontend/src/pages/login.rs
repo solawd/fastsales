@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::button::Button;
 use crate::components::input::Input;
-use crate::components::layout::Layout;
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Serialize)]
@@ -32,13 +31,13 @@ pub fn LoginPage() -> impl IntoView {
     let (password, set_password) = create_signal(String::new());
     let (error, set_error) = create_signal(Option::<String>::None);
     #[allow(unused_variables)]
-    let navigate = use_navigate();
+    let _navigate = use_navigate();
 
     let on_submit = move |_| {
         let username = username.get_untracked();
         let password = password.get_untracked();
         let set_error = set_error.clone();
-        let navigate = navigate.clone();
+        let _navigate = _navigate.clone();
         
         #[cfg(target_arch = "wasm32")]
         {
@@ -75,7 +74,7 @@ pub fn LoginPage() -> impl IntoView {
                      }
                 }
                 
-                navigate("/dashboard", Default::default());
+                _navigate("/dashboard", Default::default());
             });
         }
         #[cfg(not(target_arch = "wasm32"))]

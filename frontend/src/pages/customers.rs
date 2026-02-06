@@ -17,8 +17,8 @@ pub fn CustomersListPage() -> impl IntoView {
     
     let navigate = use_navigate();
 
-    let fetch_customers = move || {
-        let navigate = navigate.clone();
+    let _fetch_customers = move || {
+        let _navigate = navigate.clone();
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -33,7 +33,7 @@ pub fn CustomersListPage() -> impl IntoView {
                 .send().await {
                 
                 if res.status() == 401 {
-                    navigate("/", Default::default());
+                    _navigate("/", Default::default());
                     return;
                 }
 
@@ -45,16 +45,16 @@ pub fn CustomersListPage() -> impl IntoView {
     };
 
     create_effect({
-        let fetch_customers = fetch_customers.clone();
+        let _fetch_customers = _fetch_customers.clone();
         move |_| {
-            fetch_customers();
+            _fetch_customers();
         }
     });
 
     let delete_action = {
-        let fetch_customers = fetch_customers.clone();
+        let _fetch_customers = _fetch_customers.clone();
         move |id: Uuid| {
-            let fetch_customers = fetch_customers.clone();
+            let _fetch_customers = _fetch_customers.clone();
             #[allow(unused_variables)]
             let id = id;
             #[cfg(target_arch = "wasm32")]
@@ -64,7 +64,7 @@ pub fn CustomersListPage() -> impl IntoView {
                     .header("Authorization", &format!("Bearer {}", token))
                     .send()
                     .await;
-                fetch_customers();
+                _fetch_customers();
             });
         }
     };
@@ -85,10 +85,10 @@ pub fn CustomersListPage() -> impl IntoView {
                     prop:value=search_query
                     on:input=move |ev| set_search_query.set(event_target_value(&ev))
                     on:keydown={
-                        let fetch_customers = fetch_customers.clone();
+                        let _fetch_customers = _fetch_customers.clone();
                         move |ev| {
                             if ev.key() == "Enter" {
-                                fetch_customers();
+                                _fetch_customers();
                             }
                         }
                     }
@@ -97,8 +97,8 @@ pub fn CustomersListPage() -> impl IntoView {
                 <button 
                     class="btn-primary"
                     on:click={
-                        let fetch_customers = fetch_customers.clone();
-                        move |_| fetch_customers()
+                        let _fetch_customers = _fetch_customers.clone();
+                        move |_| _fetch_customers()
                     }
                     style="padding: 0.75rem 1.5rem; background-color: var(--brand-primary); color: white; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer;"
                 >
@@ -122,8 +122,8 @@ pub fn CustomersListPage() -> impl IntoView {
                             each=move || customers.get()
                             key=|customer| customer.id
                             children=move |customer| {
-                                let c_id = customer.id;
-                                let delete_handler = delete_action.clone();
+                                let _c_id = customer.id;
+                                let _delete_handler = delete_action.clone();
                                 view! {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{format!("{} {}", customer.first_name, customer.last_name)}</td>
@@ -136,7 +136,7 @@ pub fn CustomersListPage() -> impl IntoView {
                                                 on:click=move |_| {
                                                     #[cfg(target_arch = "wasm32")]
                                                     if web_sys::window().unwrap().confirm_with_message("Are you sure?").unwrap() {
-                                                        delete_handler(c_id);
+                                                        _delete_handler(_c_id);
                                                     }
                                                 }
                                                 style="background: none; border: none; color: var(--state-error); cursor: pointer; font-weight: 500;"
@@ -181,7 +181,7 @@ pub fn CustomerEditPage() -> impl IntoView {
         let navigate = navigate.clone();
         move |_| {
             let current_id = id();
-            let navigate = navigate.clone();
+            let _navigate = navigate.clone();
             if current_id != "create" && !current_id.is_empty() {
                 #[cfg(target_arch = "wasm32")]
                 spawn_local(async move {
@@ -191,7 +191,7 @@ pub fn CustomerEditPage() -> impl IntoView {
                         .send().await {
                         
                         if res.status() == 401 {
-                            navigate("/", Default::default());
+                            _navigate("/", Default::default());
                             return;
                         }
 

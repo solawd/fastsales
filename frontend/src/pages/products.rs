@@ -16,13 +16,13 @@ pub fn ProductListPage() -> impl IntoView {
     let (products, set_products) = create_signal(Vec::<Product>::new());
     let (search_query, set_search_query) = create_signal(String::new());
     
-    let navigate = use_navigate();
+    let _navigate = use_navigate();
     
     // Use Rc to share the fetch closure
     let fetch_products = std::rc::Rc::new({
-        let navigate = navigate.clone();
+        let _navigate = _navigate.clone();
         move || {
-            let navigate = navigate.clone();
+            let _navigate = _navigate.clone();
             #[cfg(target_arch = "wasm32")]
             spawn_local(async move {
                 let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -36,7 +36,7 @@ pub fn ProductListPage() -> impl IntoView {
                     .header("Authorization", &format!("Bearer {}", token))
                     .send().await {
                     if res.status() == 401 {
-                        navigate("/", Default::default());
+                        _navigate("/", Default::default());
                         return;
                     }
                     if let Ok(data) = res.json::<Vec<Product>>().await {
@@ -131,8 +131,8 @@ pub fn ProductListPage() -> impl IntoView {
                             each=move || products.get()
                             key=|product| product.id
                             children=move |product| {
-                                let p_id = product.id;
-                                let delete_handler = delete_action.clone();
+                                let _p_id = product.id;
+                                let _delete_handler = delete_action.clone();
                                 view! {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{product.name}</td>
@@ -145,7 +145,7 @@ pub fn ProductListPage() -> impl IntoView {
                                                 on:click=move |_| {
                                                     #[cfg(target_arch = "wasm32")]
                                                     if web_sys::window().unwrap().confirm_with_message("Are you sure?").unwrap() {
-                                                        delete_handler(p_id);
+                                                        _delete_handler(_p_id);
                                                     }
                                                 }
                                                 style="background: none; border: none; color: var(--state-error); cursor: pointer; font-weight: 500;"
@@ -182,14 +182,14 @@ pub fn ProductEditPage() -> impl IntoView {
     let (new_detail_value, set_new_detail_value) = create_signal(String::new());
     
     #[allow(unused_variables)]
-    let navigate = use_navigate();
+    let _navigate = use_navigate();
 
     // Load data if editing
     create_effect({
-        let navigate = navigate.clone();
+        let _navigate = _navigate.clone();
         move |_| {
             let current_id = id();
-            let navigate = navigate.clone();
+            let _navigate = _navigate.clone();
             if current_id != "create" && !current_id.is_empty() {
                 #[cfg(target_arch = "wasm32")]
                 spawn_local(async move {
@@ -198,7 +198,7 @@ pub fn ProductEditPage() -> impl IntoView {
                         .header("Authorization", &format!("Bearer {}", token))
                         .send().await {
                         if res.status() == 401 {
-                            navigate("/", Default::default());
+                            _navigate("/", Default::default());
                             return;
                         }
                         if let Ok(product) = res.json::<Product>().await {
@@ -253,7 +253,7 @@ pub fn ProductEditPage() -> impl IntoView {
         };
         
         #[allow(unused_mut)]
-        let mut navigate = navigate.clone();
+        let mut _navigate = _navigate.clone();
 
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
@@ -267,7 +267,7 @@ pub fn ProductEditPage() -> impl IntoView {
             if let Ok(_) = req
                 .header("Authorization", &format!("Bearer {}", token))
                 .json(&input).unwrap().send().await {
-                 navigate("/products", Default::default());
+                 _navigate("/products", Default::default());
             }
         });
     };

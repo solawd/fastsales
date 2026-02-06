@@ -1,8 +1,10 @@
 use leptos::*;
 use leptos_router::*;
-use shared::models::{Sale, SaleInput, Product, Customer, SalesListResponse};
+use shared::models::{Sale, Customer, Product, SaleInput};
+#[cfg(target_arch = "wasm32")]
+use shared::models::SalesListResponse;
 use uuid::Uuid;
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{Utc, NaiveDate};
 
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
@@ -15,13 +17,13 @@ use crate::utils::CURRENCY;
 pub fn SalesListPage() -> impl IntoView {
     #[allow(unused_variables)]
     let (sales, set_sales) = create_signal(Vec::<Sale>::new());
-    let (total_period_sales, set_total_period_sales) = create_signal(0i64);
+    let (total_period_sales, _set_total_period_sales) = create_signal(0i64);
     let (start_date, set_start_date) = create_signal(String::new());
     let (end_date, set_end_date) = create_signal(String::new());
     
     let navigate = use_navigate();
     let fetch_sales = move || {
-        let navigate = navigate.clone();
+        let _navigate = navigate.clone();
         #[cfg(target_arch = "wasm32")]
             spawn_local(async move {
                 let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -43,12 +45,12 @@ pub fn SalesListPage() -> impl IntoView {
                     .header("Authorization", &format!("Bearer {}", token))
                     .send().await {
                     if res.status() == 401 {
-                        navigate("/", Default::default());
+                        _navigate("/", Default::default());
                         return;
                     }
                     if let Ok(data) = res.json::<SalesListResponse>().await {
                         set_sales.set(data.sales);
-                        set_total_period_sales.set(data.total_sales_period_cents);
+                        _set_total_period_sales.set(data.total_sales_period_cents);
                     }
                 }
             });
@@ -64,7 +66,7 @@ pub fn SalesListPage() -> impl IntoView {
     let delete_action = {
         let fetch_sales = fetch_sales.clone();
         move |id: Uuid| {
-            let fetch_sales = fetch_sales.clone();
+            let _fetch_sales = fetch_sales.clone();
             #[allow(unused_variables)]
             let id = id;
             #[cfg(target_arch = "wasm32")]
@@ -74,7 +76,7 @@ pub fn SalesListPage() -> impl IntoView {
                     .header("Authorization", &format!("Bearer {}", token))
                     .send()
                     .await;
-                fetch_sales();
+                _fetch_sales();
             });
         }
     };
@@ -143,8 +145,8 @@ pub fn SalesListPage() -> impl IntoView {
                             each=move || sales.get()
                             key=|sale| sale.id
                             children=move |sale| {
-                                let s_id = sale.id;
-                                let delete_handler = delete_action.clone();
+                                let _s_id = sale.id;
+                                let _delete_handler = delete_action.clone();
                                 view! {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{sale.date_of_sale.format("%Y-%m-%d").to_string()}</td>
@@ -161,7 +163,7 @@ pub fn SalesListPage() -> impl IntoView {
                                                 on:click=move |_| {
                                                     #[cfg(target_arch = "wasm32")]
                                                     if web_sys::window().unwrap().confirm_with_message("Are you sure?").unwrap() {
-                                                        delete_handler(s_id);
+                                                        _delete_handler(_s_id);
                                                     }
                                                 }
                                                 style="background: none; border: none; color: var(--state-error); cursor: pointer; font-weight: 500;"
@@ -207,7 +209,7 @@ pub fn SalesEditPage() -> impl IntoView {
 
     // Fetch Lists and Sale Data
     create_effect(move |_| {
-        let current_id = id();
+        let _current_id = id();
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -227,8 +229,8 @@ pub fn SalesEditPage() -> impl IntoView {
             }
 
             // Fetch Sale if Editing
-            if current_id != "create" && !current_id.is_empty() {
-                if let Ok(res) = Request::get(&format!("/api/sales/{}", current_id)).header("Authorization", &format!("Bearer {}", token)).send().await {
+            if _current_id != "create" && !_current_id.is_empty() {
+                if let Ok(res) = Request::get(&format!("/api/sales/{}", _current_id)).header("Authorization", &format!("Bearer {}", token)).send().await {
                     if let Ok(sale) = res.json::<Sale>().await {
                         set_product_id.set(sale.product_id.to_string());
                         set_customer_id.set(sale.customer_id.to_string());
@@ -270,7 +272,7 @@ pub fn SalesEditPage() -> impl IntoView {
         };
         
         #[allow(unused_mut)]
-        let mut navigate = navigate.clone();
+        let mut _navigate = navigate.clone();
 
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
@@ -284,7 +286,7 @@ pub fn SalesEditPage() -> impl IntoView {
             if let Ok(_) = req
                 .header("Authorization", &format!("Bearer {}", token))
                 .json(&input).unwrap().send().await {
-                 navigate("/sales", Default::default());
+                 _navigate("/sales", Default::default());
             }
         });
     };

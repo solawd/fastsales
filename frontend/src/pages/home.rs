@@ -1,6 +1,6 @@
 use leptos::*;
-use crate::components::layout::DashboardLayout;
-use shared::models::{Product, SalesStats};
+
+use shared::models::SalesStats;
 
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
@@ -11,13 +11,13 @@ use crate::utils::CURRENCY;
 
 #[component]
 pub fn DashboardPage() -> impl IntoView {
-    let (today_sales, set_today_sales) = create_signal(SalesStats::default());
-    let (weekly_sales, set_weekly_sales) = create_signal(Vec::<shared::models::DailySales>::new());
+    let (today_sales, _set_today_sales) = create_signal(SalesStats::default());
+    let (weekly_sales, _set_weekly_sales) = create_signal(Vec::<shared::models::DailySales>::new());
     
-    let navigate = leptos_router::use_navigate();
+    let _navigate = leptos_router::use_navigate();
 
     create_effect(move |_| {
-        let navigate = navigate.clone();
+        let _navigate = _navigate.clone();
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
@@ -27,11 +27,11 @@ pub fn DashboardPage() -> impl IntoView {
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                  if resp.status() == 401 {
-                     navigate("/", Default::default());
+                     _navigate("/", Default::default());
                      return;
                  }
                  if let Ok(stats) = resp.json::<SalesStats>().await {
-                     set_today_sales.set(stats);
+                     _set_today_sales.set(stats);
                  }
             }
 
@@ -40,11 +40,11 @@ pub fn DashboardPage() -> impl IntoView {
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                  if resp.status() == 401 {
-                     navigate("/", Default::default());
+                     _navigate("/", Default::default());
                      return;
                  }
                  if let Ok(stats) = resp.json::<Vec<shared::models::DailySales>>().await {
-                     set_weekly_sales.set(stats);
+                     _set_weekly_sales.set(stats);
                  }
             }
         });
