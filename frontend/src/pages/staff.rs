@@ -1,6 +1,8 @@
 use leptos::*;
 use leptos_router::*;
-use shared::models::{Staff, StaffInput, UploadResponse};
+use shared::models::{Staff, StaffInput};
+#[cfg(target_arch = "wasm32")]
+use shared::models::UploadResponse;
 use uuid::Uuid;
 
 #[cfg(target_arch = "wasm32")]
@@ -125,7 +127,7 @@ pub fn StaffEditPage() -> impl IntoView {
     let (first_name, set_first_name) = create_signal(String::new());
     let (last_name, set_last_name) = create_signal(String::new());
     let (mobile_number, set_mobile_number) = create_signal(String::new());
-    let (photo_link, set_photo_link) = create_signal(String::new());
+    let (photo_link, _set_photo_link) = create_signal(String::new());
     let (username, set_username) = create_signal(String::new());
     let (password, set_password) = create_signal(String::new());
     let navigate = use_navigate();
@@ -154,7 +156,7 @@ pub fn StaffEditPage() -> impl IntoView {
                         set_first_name.set(staff.first_name);
                         set_last_name.set(staff.last_name);
                         set_mobile_number.set(staff.mobile_number);
-                        set_photo_link.set(staff.photo_link);
+                        _set_photo_link.set(staff.photo_link);
                         set_username.set(staff.username);
                     }
                 }
@@ -236,7 +238,7 @@ pub fn StaffEditPage() -> impl IntoView {
                          if resp.ok() {
                              if let Ok(json) = JsFuture::from(resp.json().unwrap()).await {
                                  if let Ok(data) = serde_wasm_bindgen::from_value::<UploadResponse>(json) {
-                                     set_photo_link.set(data.url);
+                                     _set_photo_link.set(data.url);
                                  }
                              }
                          }

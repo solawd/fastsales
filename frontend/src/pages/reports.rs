@@ -1,6 +1,6 @@
 use leptos::*;
-use leptos::*;
-use shared::models::{TopProduct, SalesListResponse, SalesStats}; // Ensure these are imported
+
+use shared::models::{TopProduct, SalesListResponse}; // Ensure these are imported
 use crate::utils::CURRENCY;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
@@ -11,49 +11,53 @@ use wasm_bindgen_futures::spawn_local;
 pub fn SalesReportsPage() -> impl IntoView {
     let (start_date, set_start_date) = create_signal(String::new());
     let (end_date, set_end_date) = create_signal(String::new());
-    let (top_products, set_top_products) = create_signal(Vec::<TopProduct>::new());
-    let (sales_response, set_sales_response) = create_signal(SalesListResponse {
+    // Temporary state for inputs
+    let (input_start_date, set_input_start_date) = create_signal(String::new());
+    let (input_end_date, set_input_end_date) = create_signal(String::new());
+
+    let (top_products, _set_top_products) = create_signal(Vec::<TopProduct>::new());
+    let (sales_response, _set_sales_response) = create_signal(SalesListResponse {
         sales: vec![],
         total_sales_period_cents: 0,
     });
     let (page, set_page) = create_signal(1i64);
-    let (limit, set_limit) = create_signal(20i64); // Default 20
+    let (limit, _set_limit) = create_signal(20i64); // Default 20
     
     // Fetch Data Effect
     create_effect(move |_| {
-        let s_date = start_date.get();
-        let e_date = end_date.get();
-        let p = page.get();
-        let l = limit.get();
+        let _s_date = start_date.get();
+        let _e_date = end_date.get();
+        let _p = page.get();
+        let _l = limit.get();
         
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
             
             // Build Query Params
-            let mut query = format!("page={}&limit={}", p, l);
-            if !s_date.is_empty() { query.push_str(&format!("&start_date={}", s_date)); }
-            if !e_date.is_empty() { query.push_str(&format!("&end_date={}", e_date)); }
+            let mut query = format!("page={}&limit={}", _p, _l);
+            if !_s_date.is_empty() { query.push_str(&format!("&start_date={}", _s_date)); }
+            if !_e_date.is_empty() { query.push_str(&format!("&end_date={}", _e_date)); }
             
             // Fetch Sales List
             if let Ok(resp) = Request::get(&format!("/api/sales?{}", query))
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                  if let Ok(data) = resp.json::<SalesListResponse>().await {
-                     set_sales_response.set(data);
+                     _set_sales_response.set(data);
                  }
             }
             
             // Fetch Top Products (only depends on date, not page)
             let mut stats_query = String::new();
-            if !s_date.is_empty() { stats_query.push_str(&format!("start_date={}&", s_date)); }
-            if !e_date.is_empty() { stats_query.push_str(&format!("end_date={}", e_date)); }
+            if !_s_date.is_empty() { stats_query.push_str(&format!("start_date={}&", _s_date)); }
+            if !_e_date.is_empty() { stats_query.push_str(&format!("end_date={}", _e_date)); }
             
             if let Ok(resp) = Request::get(&format!("/api/sales_stats/top_products?{}", stats_query))
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
                  if let Ok(data) = resp.json::<Vec<TopProduct>>().await {
-                     set_top_products.set(data);
+                     _set_top_products.set(data);
                  }
             }
         });
@@ -73,29 +77,29 @@ pub fn SalesReportsPage() -> impl IntoView {
                     <div style="flex: 1;">
                         <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">"Start Date"</label>
                         <input type="date"
-                            on:input=move |ev| set_start_date.set(event_target_value(&ev))
-                            prop:value=start_date
+                            on:input=move |ev| set_input_start_date.set(event_target_value(&ev))
+                            prop:value=input_start_date
                             style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);"
                         />
                     </div>
                     <div style="flex: 1;">
                         <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">"End Date"</label>
                         <input type="date"
-                            on:input=move |ev| set_end_date.set(event_target_value(&ev))
-                            prop:value=end_date
+                            on:input=move |ev| set_input_end_date.set(event_target_value(&ev))
+                            prop:value=input_end_date
                             style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);"
                         />
                     </div>
                     <div>
                         <button 
                             on:click=move |_| {
-                                set_start_date.set(String::new());
-                                set_end_date.set(String::new());
+                                set_start_date.set(input_start_date.get());
+                                set_end_date.set(input_end_date.get());
                                 set_page.set(1);
                             }
                             style="padding: 0.5rem 1.5rem; background: var(--bg-page); color: var(--text-main); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); font-weight: 600; cursor: pointer;"
                         >
-                            "Reset"
+                            "Generate Report"
                         </button>
                     </div>
                 </div>

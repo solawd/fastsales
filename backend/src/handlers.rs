@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State, Multipart, Extension, Query},
+    extract::{Path, State, Extension, Query},
     http::StatusCode,
 };
 
@@ -9,8 +9,8 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use serde::Deserialize;
+
 use jsonwebtoken::{EncodingKey, Header};
 use sqlx::sqlite::SqliteRow;
 use sqlx::Row;
@@ -18,12 +18,12 @@ use rand_core::OsRng;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-use chrono::{Utc, Datelike, Duration};
+use chrono::{Utc, Datelike};
 
 use crate::AppState;
 use crate::auth::Claims;
 use shared::models::{
-    Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductDetailsInput, ProductInput, ProductType,
+    Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductInput, ProductType,
     Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesListResponse,
     TopProduct,
 };
@@ -799,7 +799,7 @@ pub async fn get_weekly_sales_stats(
     // User requirement: "line chart of sales over the last n days of the week, today inclusive. Assume the week starts on Mondays."
     // So if today is Wed, we want Mon, Tue, Wed.
     
-    let mut current_date = start_date;
+
     let today = now;
     
     // Create map for easy lookup
@@ -990,6 +990,7 @@ pub struct AuthRequest {
 }
 
 #[derive(utoipa::ToSchema)]
+#[allow(dead_code)]
 pub struct FileUpload {
     #[schema(value_type = String, format = Binary)]
     pub file: Vec<u8>,
