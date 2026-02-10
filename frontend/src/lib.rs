@@ -10,7 +10,7 @@ pub mod utils;
 use pages::login::LoginPage;
 use pages::home::DashboardPage;
 use pages::products::{ProductListPage, ProductEditPage};
-use pages::sales::{SalesListPage, SalesEditPage};
+use pages::sales::{SalesListPage, SalesCreatePage, SalesDetailPage};
 use pages::customers::{CustomersListPage, CustomerEditPage};
 use pages::staff::{StaffListPage, StaffEditPage};
 use pages::profile::ProfilePage;
@@ -35,8 +35,8 @@ pub fn App() -> impl IntoView {
                         <Route path="/products/create" view=ProductEditPage/>
                         <Route path="/products/:id" view=ProductEditPage/>
                         <Route path="/sales" view=SalesListPage/>
-                        <Route path="/sales/create" view=SalesEditPage/>
-                        <Route path="/sales/:id" view=SalesEditPage/>
+                        <Route path="/sales/create" view=SalesCreatePage/>
+                        <Route path="/sales/:id" view=SalesDetailPage/>
                         <Route path="/reports" view=SalesReportsPage/>
                         <Route path="/customers" view=CustomersListPage/>
                         <Route path="/customers/create" view=CustomerEditPage/>

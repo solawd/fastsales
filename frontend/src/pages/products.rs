@@ -137,7 +137,7 @@ pub fn ProductListPage() -> impl IntoView {
                                     <tr style="border-bottom: 1px solid var(--border-subtle);">
                                         <td style="padding: 1rem;">{product.name}</td>
                                         <td style="padding: 1rem;">{product.product_type.as_str()}</td>
-                                        <td style="padding: 1rem;">{format!("{}{:.2}", CURRENCY, product.price_cents as f64 / 100.0)}</td>
+                                        <td style="padding: 1rem;">{format!("{} {:.2}", CURRENCY, product.price_cents as f64 / 100.0)}</td>
                                         <td style="padding: 1rem;">{product.stock}</td>
                                         <td style="padding: 1rem; display: flex; gap: 0.5rem;">
                                             <A href=format!("/products/{}", product.id) attr:style="color: var(--brand-primary); text-decoration: none; font-weight: 500;">"Edit"</A>

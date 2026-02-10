@@ -23,7 +23,8 @@ use handlers::{
     delete_sale, delete_staff, get_customer, get_product, get_sale, get_staff, list_customers,
     list_products, list_sales, list_staff, update_customer, update_product, update_sale,
     update_staff, login, upload_file, get_profile, get_today_sales, get_weekly_sales_stats,
-    get_top_products,
+    get_top_products, create_sales_transaction, list_sales_transactions, get_sales_transaction,
+    get_sales_by_product, get_staff_transactions,
 };
 use auth::auth_middleware;
 use sqlx::SqlitePool;
@@ -43,6 +44,9 @@ use sqlx::SqlitePool;
         handlers::delete_customer,
         handlers::list_sales,
         handlers::create_sale,
+        handlers::create_sales_transaction,
+        handlers::list_sales_transactions,
+        handlers::get_sales_transaction,
         handlers::get_sale,
         handlers::update_sale,
         handlers::delete_sale,
@@ -51,7 +55,12 @@ use sqlx::SqlitePool;
         handlers::get_staff,
         handlers::update_staff,
         handlers::delete_staff,
-        handlers::login
+        handlers::login,
+        handlers::get_today_sales,
+        handlers::get_weekly_sales_stats,
+        handlers::get_top_products,
+        handlers::get_sales_by_product,
+        handlers::get_staff_transactions
     ),
     components(schemas(
         shared::models::Product,
@@ -61,10 +70,17 @@ use sqlx::SqlitePool;
         shared::models::ProductDetailsInput,
         shared::models::Customer,
         shared::models::CustomerInput,
+        shared::models::SaleItem,
+        shared::models::SaleItemInput,
         shared::models::Sale,
         shared::models::SaleInput,
         shared::models::Staff,
         shared::models::StaffInput,
+        shared::models::SalesItemsListResponse,
+        shared::models::SalesStats,
+        shared::models::DailySales,
+        shared::models::TopProduct,
+        shared::models::ProductSalesSummary,
         handlers::AuthRequest,
         handlers::AuthResponse
     )),
@@ -72,6 +88,8 @@ use sqlx::SqlitePool;
         (name = "Products", description = "Product CRUD"),
         (name = "Customers", description = "Customer CRUD"),
         (name = "Sales", description = "Sales CRUD"),
+        (name = "Reports", description = "Sales Reports & Statistics"),
+        (name = "Staff Transactions", description = "Transactions by Staff"),
         (name = "Staff", description = "Staff CRUD"),
         (name = "Auth", description = "Authentication")
     ),
@@ -170,9 +188,12 @@ async fn main() {
             get(get_customer).put(update_customer).delete(delete_customer),
         )
         .route("/sales", get(list_sales).post(create_sale))
+        .route("/sales_transactions", get(list_sales_transactions).post(create_sales_transaction))
+        .route("/sales_transactions/:id", get(get_sales_transaction))
         .route("/sales/stats/today", get(get_today_sales))
         .route("/sales/stats/week", get(get_weekly_sales_stats))
         .route("/sales_stats/top_products", get(get_top_products))
+        .route("/sales/stats/by_product", get(get_sales_by_product))
         .route(
             "/sales/:id",
             get(get_sale).put(update_sale).delete(delete_sale),
@@ -182,6 +203,7 @@ async fn main() {
             "/staff/:id",
             get(get_staff).put(update_staff).delete(delete_staff),
         )
+        .route("/staff/:id/transactions", get(get_staff_transactions))
         .route("/auth/profile", get(get_profile))
         .route_layer(from_fn_with_state(state.clone(), auth_middleware));
 

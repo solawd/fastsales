@@ -14,7 +14,7 @@ leptos_meta = { version = "0.6" }
 leptos_router = { version = "0.6" }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
-web-sys = { version = "0.3", features = ["FormData", "Request", "RequestInit", "Response", "Headers", "Window", "Storage", "MouseEvent", "HtmlInputElement", "File", "FileList", "Blob"] }
+web-sys = { version = "0.3", features = ["FormData", "Request", "RequestInit", "Response", "Headers", "Window", "Storage", "MouseEvent", "HtmlInputElement", "File", "FileList", "Blob", "SubmitEvent"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 shared = { path = "../shared" }
 utoipa = { version = "5", features = ["uuid"] }
@@ -26,7 +26,7 @@ gloo-net = "0.5"
 wasm-bindgen-futures = "0.4"
 uuid = { version = "1", features = ["js"] }
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["MouseEvent", "Storage", "Window"] }
+web-sys = { version = "0.3", features = ["MouseEvent", "Storage", "Window", "SubmitEvent"] }
 
 
 [features]
