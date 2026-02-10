@@ -10,6 +10,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use serde::Deserialize;
+use utoipa::IntoParams;
 
 use jsonwebtoken::{EncodingKey, Header};
 use sqlx::sqlite::SqliteRow;
@@ -24,8 +25,8 @@ use crate::AppState;
 use crate::auth::Claims;
 use shared::models::{
     Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductInput, ProductType,
-    Sale, SaleInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesListResponse,
-    TopProduct,
+    SaleItem, SaleItemInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesItemsListResponse,
+    TopProduct, Sale, SaleInput, ProductSalesSummary,
 };
 
 #[derive(Deserialize)]
@@ -34,6 +35,7 @@ pub struct SalesSearchParams {
     pub end_date: Option<String>,
     pub page: Option<i64>,
     pub limit: Option<i64>,
+    pub query: Option<String>,
 }
 
 
@@ -584,39 +586,20 @@ pub async fn delete_customer(
     path = "/api/sales",
     tag = "Sales",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List sales", body = [Sale]))
+    responses((status = 200, description = "List sales", body = SalesItemsListResponse))
 )]
 pub async fn list_sales(
     State(state): State<AppState>,
     Query(params): Query<SalesSearchParams>,
-) -> Result<Json<SalesListResponse>, StatusCode> {
-    let mut query = "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales".to_string();
-    let mut conditions = Vec::new();
+) -> Result<Json<SalesItemsListResponse>, StatusCode> {
+    let mut query = "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sale_items".to_string();
     let mut args = Vec::new();
 
-    if let Some(start) = &params.start_date {
-        if !start.is_empty() {
-             conditions.push("date_of_sale >= ?");
-             args.push(start.clone());
-        }
-    }
-    
-    if let Some(end) = &params.end_date {
-        if !end.is_empty() {
-            // Append explicit time to include the entire end day if it's just a date string "YYYY-MM-DD"
-            // Or assume client sends "YYYY-MM-DDT23:59:59"
-            // For simplicity, let's assume raw string comparison works, but strict ISO "YYYY-MM-DD" might miss times on that day.
-            // Let's assume standard "YYYY-MM-DD" and append "T23:59:59Z" if it's just a date, or just handle at frontend.
-            // Let's stick to raw generic comparison first.
-             conditions.push("date_of_sale <= ?");
-             args.push(end.clone());
-        }
-    }
+    let (start_date, end_date) = get_default_dates(params.start_date.clone(), params.end_date.clone());
 
-    if !conditions.is_empty() {
-        query.push_str(" WHERE ");
-        query.push_str(&conditions.join(" AND "));
-    }
+    query.push_str(" WHERE date(date_of_sale) >= date(?) AND date(date_of_sale) <= date(?)");
+    args.push(start_date);
+    args.push(end_date);
     
     // Sort by date descending
     query.push_str(" ORDER BY date_of_sale DESC");
@@ -642,16 +625,12 @@ pub async fn list_sales(
 
     let mut sales = Vec::with_capacity(rows.len());
     for row in rows {
-        sales.push(sale_from_row(&row)?);
+        sales.push(sale_item_from_row(&row)?);
     }
     
     // Calculate total for the period (DB side query usually better, but for small datasets iterating is fine too. User asked for DB query)
     // Let's run a separate COUNT/SUM query as requested.
-    let mut sum_query = "SELECT SUM(total_cents) as total FROM sales".to_string();
-    if !conditions.is_empty() {
-        sum_query.push_str(" WHERE ");
-        sum_query.push_str(&conditions.join(" AND "));
-    }
+    let sum_query = "SELECT SUM(total_cents) as total FROM sale_items WHERE date(date_of_sale) >= date(?) AND date(date_of_sale) <= date(?)".to_string();
     
     let mut sql_sum_query = sqlx::query(&sum_query);
     for arg in &args {
@@ -661,7 +640,7 @@ pub async fn list_sales(
     let row = sql_sum_query.fetch_one(&state.db).await.map_err(map_db_err)?;
     let total_sales_period_cents: i64 = row.try_get("total").unwrap_or(0);
 
-    Ok(Json(SalesListResponse {
+    Ok(Json(SalesItemsListResponse {
         sales,
         total_sales_period_cents,
     }))
@@ -671,16 +650,17 @@ pub async fn list_sales(
     post,
     path = "/api/sales",
     tag = "Sales",
-    request_body = SaleInput,
+    request_body = SaleItemInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Sale created", body = Sale))
+    responses((status = 201, description = "Sale created", body = SaleItem))
 )]
 pub async fn create_sale(
     State(state): State<AppState>,
-    Json(input): Json<SaleInput>,
-) -> Result<(StatusCode, Json<Sale>), StatusCode> {
-    let sale = Sale {
+    Json(input): Json<SaleItemInput>,
+) -> Result<(StatusCode, Json<SaleItem>), StatusCode> {
+    let sale = SaleItem {
         id: Uuid::new_v4(),
+        sale_id: input.sale_id,
         product_id: input.product_id,
         customer_id: input.customer_id,
         date_of_sale: input.date_of_sale,
@@ -689,12 +669,15 @@ pub async fn create_sale(
         total_cents: input.total_cents,
         total_resolved: input.total_resolved,
         note: input.note,
+        product_name: None,
+        price_per_item: None,
     };
 
     sqlx::query(
-        "INSERT INTO sales (id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sale_items (id, sale_id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note, product_name, price_per_item) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT name FROM products WHERE id = ?), (SELECT price_cents FROM products WHERE id = ?))",
     )
     .bind(sale.id.to_string())
+    .bind(sale.sale_id.map(|id| id.to_string()))
     .bind(sale.product_id.to_string())
     .bind(sale.customer_id.to_string())
     .bind(&sale.date_of_sale)
@@ -703,11 +686,236 @@ pub async fn create_sale(
     .bind(sale.total_cents)
     .bind(sale.total_resolved)
     .bind(&sale.note)
+    .bind(sale.product_id.to_string())
+    .bind(sale.product_id.to_string())
     .execute(&state.db)
     .await
     .map_err(map_db_err)?;
 
+    // Fetch the created item to get product_name and price_per_item and ensure consistency
+    let row = sqlx::query("SELECT sale_items.id, sale_items.sale_id, sale_items.product_id, sale_items.customer_id, sale_items.date_of_sale, sale_items.quantity, sale_items.discount, sale_items.total_cents, sale_items.total_resolved, sale_items.note, COALESCE(sale_items.product_name, products.name) as product_name, COALESCE(sale_items.price_per_item, products.price_cents) as price_per_item FROM sale_items LEFT JOIN products ON sale_items.product_id = products.id WHERE sale_items.id = ?")
+        .bind(sale.id.to_string())
+        .fetch_one(&state.db)
+        .await
+        .map_err(map_db_err)?;
+        
+    let sale = sale_item_from_row(&row)?;
+
     Ok((StatusCode::CREATED, Json(sale)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/sales_transactions",
+    tag = "Sales",
+    request_body = SaleInput,
+    security(("bearer_auth" = [])),
+    responses((status = 201, description = "Sale transaction created", body = Sale))
+)]
+pub async fn create_sales_transaction(
+    State(state): State<AppState>,
+    Json(input): Json<shared::models::SaleInput>,
+) -> Result<(StatusCode, Json<shared::models::Sale>), StatusCode> {
+    let sale_id = Uuid::new_v4();
+    let mut sale = shared::models::Sale {
+        id: sale_id,
+        customer_id: input.customer_id,
+        date_and_time: input.date_and_time,
+        sale_items: input.sale_items.iter().map(|item_input| shared::models::SaleItem {
+            id: Uuid::new_v4(),
+            sale_id: Some(sale_id),
+            product_id: item_input.product_id,
+            customer_id: item_input.customer_id,
+            date_of_sale: item_input.date_of_sale,
+            quantity: item_input.quantity,
+            discount: item_input.discount,
+            total_cents: item_input.total_cents,
+            total_resolved: item_input.total_resolved,
+            note: item_input.note.clone(),
+            product_name: None,
+            price_per_item: None,
+        }).collect(),
+        total_cents: input.total_cents,
+        discount: input.discount,
+        total_resolved: input.total_resolved,
+        sales_channel: input.sales_channel,
+        staff_responsible: input.staff_responsible,
+        company_branch: input.company_branch,
+        car_number: input.car_number,
+        receipt_number: input.receipt_number,
+    };
+
+    let mut tx = state.db.begin().await.map_err(map_db_err)?;
+
+    sqlx::query(
+        "INSERT INTO sales (id, customer_id, date_and_time, total_cents, discount, total_resolved, sales_channel, staff_responsible, company_branch, car_number, receipt_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(sale.id.to_string())
+    .bind(sale.customer_id.map(|id| id.to_string()))
+    .bind(&sale.date_and_time)
+    .bind(sale.total_cents)
+    .bind(sale.discount)
+    .bind(sale.total_resolved)
+    .bind(sale.sales_channel.to_string())
+    .bind(sale.staff_responsible.to_string())
+    .bind(&sale.company_branch)
+    .bind(&sale.car_number)
+    .bind(&sale.receipt_number)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_db_err)?;
+
+    for item in &sale.sale_items {
+        sqlx::query(
+            "INSERT INTO sale_items (id, sale_id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note, product_name, price_per_item) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT name FROM products WHERE id = ?), (SELECT price_cents FROM products WHERE id = ?))",
+        )
+        .bind(item.id.to_string())
+        .bind(item.sale_id.map(|id| id.to_string()))
+        .bind(item.product_id.to_string())
+        .bind(item.customer_id.to_string())
+        .bind(&item.date_of_sale)
+        .bind(item.quantity)
+        .bind(item.discount)
+        .bind(item.total_cents)
+        .bind(item.total_resolved)
+        .bind(&item.note)
+        .bind(item.product_id.to_string())
+        .bind(item.product_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+    }
+
+    // Re-fetch items to get product_names and price_per_item
+    let items_rows = sqlx::query(
+        "SELECT sale_items.id, sale_items.sale_id, sale_items.product_id, sale_items.customer_id, sale_items.date_of_sale, sale_items.quantity, sale_items.discount, sale_items.total_cents, sale_items.total_resolved, sale_items.note, COALESCE(sale_items.product_name, products.name) as product_name, COALESCE(sale_items.price_per_item, products.price_cents) as price_per_item 
+         FROM sale_items 
+         LEFT JOIN products ON sale_items.product_id = products.id 
+         WHERE sale_id = ?"
+    )
+    .bind(sale.id.to_string())
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(map_db_err)?;
+
+    let items = items_rows.into_iter().map(|r| sale_item_from_row(&r)).collect::<Result<Vec<_>, _>>()?;
+    sale.sale_items = items;
+
+    tx.commit().await.map_err(map_db_err)?;
+
+    Ok((StatusCode::CREATED, Json(sale)))
+}
+
+
+#[utoipa::path(
+    get,
+    path = "/api/sales_transactions",
+    tag = "Sales",
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "List sales transactions", body = [Sale]))
+)]
+pub async fn list_sales_transactions(
+    State(state): State<AppState>,
+    Query(params): Query<SalesSearchParams>,
+) -> Result<Json<Vec<Sale>>, StatusCode> {
+    let mut query = "SELECT sales.* FROM sales LEFT JOIN customers ON sales.customer_id = customers.id".to_string();
+    let mut conditions = Vec::new();
+    let mut args = Vec::new();
+
+    if let Some(q) = &params.query {
+        if !q.is_empty() {
+            let pattern = format!("%{}%", q);
+            conditions.push("(customers.first_name LIKE ? OR customers.last_name LIKE ? OR sales.receipt_number LIKE ?)");
+            args.push(pattern.clone());
+            args.push(pattern.clone());
+            args.push(pattern.clone());
+        }
+    }
+
+    if let Some(start) = &params.start_date {
+        if !start.is_empty() {
+             conditions.push("sales.date_and_time >= ?");
+             args.push(start.clone());
+        }
+    }
+    
+    if let Some(end) = &params.end_date {
+        if !end.is_empty() {
+             conditions.push("sales.date_and_time <= ?");
+             args.push(end.clone());
+        }
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    
+    query.push_str(" ORDER BY sales.date_and_time DESC");
+
+    // Pagination
+    let limit = params.limit.unwrap_or(20);
+    let page = params.page.unwrap_or(1);
+    let offset = (page - 1) * limit;
+
+    query.push_str(" LIMIT ? OFFSET ?");
+    
+    let mut sql_query = sqlx::query(&query);
+    for arg in &args {
+        sql_query = sql_query.bind(arg);
+    }
+    sql_query = sql_query.bind(limit).bind(offset);
+
+    let rows = sql_query
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    let mut sales = Vec::with_capacity(rows.len());
+    for row in rows {
+        sales.push(sale_from_row(&row)?);
+    }
+
+    Ok(Json(sales))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/sales_transactions/{id}",
+    tag = "Sales",
+    params(("id" = String, Path, description = "Sale UUID")),
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get sales transaction", body = Sale), (status = 404))
+)]
+pub async fn get_sales_transaction(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Sale>, StatusCode> {
+    let row = sqlx::query("SELECT * FROM sales WHERE id = ?")
+        .bind(id.to_string())
+        .fetch_optional(&state.db)
+        .await
+        .map_err(map_db_err)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut sale = sale_from_row(&row)?;
+
+    // Fetch items
+    let items_rows = sqlx::query(
+        "SELECT sale_items.id, sale_items.sale_id, sale_items.product_id, sale_items.customer_id, sale_items.date_of_sale, sale_items.quantity, sale_items.discount, sale_items.total_cents, sale_items.total_resolved, sale_items.note, COALESCE(sale_items.product_name, products.name) as product_name, COALESCE(sale_items.price_per_item, products.price_cents) as price_per_item 
+         FROM sale_items 
+         LEFT JOIN products ON sale_items.product_id = products.id 
+         WHERE sale_id = ?"
+    )
+    .bind(sale.id.to_string())
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    let items = items_rows.into_iter().map(|r| sale_item_from_row(&r)).collect::<Result<Vec<_>, _>>()?;
+    sale.sale_items = items;
+
+    Ok(Json(sale))
 }
 
 #[utoipa::path(
@@ -716,14 +924,14 @@ pub async fn create_sale(
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get sale", body = Sale), (status = 404))
+    responses((status = 200, description = "Get sale", body = SaleItem), (status = 404))
 )]
 pub async fn get_sale(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Sale>, StatusCode> {
+) -> Result<Json<SaleItem>, StatusCode> {
     let row = sqlx::query(
-        "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sales WHERE id = ?",
+        "SELECT id, product_id, customer_id, date_of_sale, quantity, discount, total_cents, total_resolved, note FROM sale_items WHERE id = ?",
     )
     .bind(id.to_string())
     .fetch_optional(&state.db)
@@ -731,13 +939,13 @@ pub async fn get_sale(
     .map_err(map_db_err)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    Ok(Json(sale_from_row(&row)?))
+    Ok(Json(sale_item_from_row(&row)?))
 }
 
 #[utoipa::path(
     get,
     path = "/api/sales/stats/today",
-    tag = "Sales",
+    tag = "Reports",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "Get today's sales stats", body = SalesStats))
 )]
@@ -745,7 +953,7 @@ pub async fn get_today_sales(
     State(state): State<AppState>,
 ) -> Result<Json<shared::models::SalesStats>, StatusCode> {
     let row = sqlx::query(
-        "SELECT SUM(total_resolved) as total, COUNT(*) as count FROM sales WHERE date(date_of_sale) = date('now')",
+        "SELECT SUM(total_resolved) as total, COUNT(*) as count FROM sale_items WHERE date(date_of_sale) = date('now')",
     )
     .fetch_one(&state.db)
     .await
@@ -763,7 +971,7 @@ pub async fn get_today_sales(
 #[utoipa::path(
     get,
     path = "/api/sales/stats/week",
-    tag = "Sales",
+    tag = "Reports",
     security(("bearer_auth" = [])),
     responses((status = 200, description = "Get weekly sales stats (Mon-Sun)", body = [DailySales]))
 )]
@@ -783,7 +991,7 @@ pub async fn get_weekly_sales_stats(
     
     let rows = sqlx::query(
         "SELECT date(date_of_sale) as day, SUM(total_resolved) as total, COUNT(*) as count 
-         FROM sales 
+         FROM sale_items 
          WHERE date(date_of_sale) >= date(?) 
          GROUP BY day 
          ORDER BY day ASC",
@@ -831,7 +1039,7 @@ pub async fn get_weekly_sales_stats(
     Ok(Json(daily_sales))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
 pub struct StatsRangeParams {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
@@ -840,7 +1048,7 @@ pub struct StatsRangeParams {
 #[utoipa::path(
     get,
     path = "/api/sales/stats/top_products",
-    tag = "Sales",
+    tag = "Reports",
     params(
         ("start_date" = Option<String>, Query, description = "Start date YYYY-MM-DD"),
         ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
@@ -852,33 +1060,18 @@ pub async fn get_top_products(
     State(state): State<AppState>,
     Query(params): Query<StatsRangeParams>,
 ) -> Result<Json<Vec<TopProduct>>, StatusCode> {
+    let (start_date, end_date) = get_default_dates(params.start_date, params.end_date);
+
     let mut query = "
         SELECT p.name as product_name, SUM(s.total_resolved) as total 
-        FROM sales s
+        FROM sale_items s
         JOIN products p ON s.product_id = p.id
+        WHERE date(s.date_of_sale) >= date(?) AND date(s.date_of_sale) <= date(?)
     ".to_string();
     
-    let mut conditions = Vec::new();
     let mut args = Vec::new();
-
-    if let Some(start) = &params.start_date {
-        if !start.is_empty() {
-            conditions.push("date(s.date_of_sale) >= date(?)");
-            args.push(start.clone());
-        }
-    }
-    
-    if let Some(end) = &params.end_date {
-        if !end.is_empty() {
-             conditions.push("date(s.date_of_sale) <= date(?)");
-             args.push(end.clone());
-        }
-    }
-
-    if !conditions.is_empty() {
-        query.push_str(" WHERE ");
-        query.push_str(&conditions.join(" AND "));
-    }
+    args.push(start_date);
+    args.push(end_date);
     
     query.push_str(" GROUP BY p.name ORDER BY total DESC LIMIT 20");
 
@@ -905,6 +1098,59 @@ pub async fn get_top_products(
     Ok(Json(results))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/sales/stats/by_product",
+    tag = "Reports",
+    params(StatsRangeParams),
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get sales by product", body = [ProductSalesSummary]))
+)]
+pub async fn get_sales_by_product(
+    State(state): State<AppState>,
+    Query(params): Query<StatsRangeParams>,
+) -> Result<Json<Vec<ProductSalesSummary>>, StatusCode> {
+    let (start_date, end_date) = get_default_dates(params.start_date, params.end_date);
+
+    let query = "
+        SELECT p.name as product_name, SUM(s.quantity) as total_quantity, SUM(s.total_resolved) as total_amount
+        FROM sale_items s
+        JOIN products p ON s.product_id = p.id
+        WHERE date(s.date_of_sale) >= date(?) AND date(s.date_of_sale) <= date(?)
+        GROUP BY p.name
+        ORDER BY total_amount DESC
+    ";
+
+    let rows = sqlx::query(query)
+        .bind(start_date)
+        .bind(end_date)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        results.push(ProductSalesSummary {
+            product_name: row.try_get("product_name").unwrap_or_default(),
+            total_quantity: row.try_get("total_quantity").unwrap_or(0),
+            total_amount_cents: row.try_get("total_amount").unwrap_or(0),
+        });
+    }
+
+    Ok(Json(results))
+}
+
+fn get_default_dates(start: Option<String>, end: Option<String>) -> (String, String) {
+    let now = Utc::now();
+    let today = now.format("%Y-%m-%d").to_string();
+    let first_day = format!("{}-{:02}-01", now.year(), now.month());
+
+    let start_date = start.filter(|s| !s.is_empty()).unwrap_or(first_day);
+    let end_date = end.filter(|s| !s.is_empty()).unwrap_or(today);
+    
+    (start_date, end_date)
+}
+
 
 
 #[utoipa::path(
@@ -912,17 +1158,18 @@ pub async fn get_top_products(
     path = "/api/sales/{id}",
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
-    request_body = SaleInput,
+    request_body = SaleItemInput,
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Sale updated", body = Sale), (status = 404))
+    responses((status = 200, description = "Sale updated", body = SaleItem), (status = 404))
 )]
 pub async fn update_sale(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(input): Json<SaleInput>,
-) -> Result<Json<Sale>, StatusCode> {
-    let sale = Sale {
+    Json(input): Json<SaleItemInput>,
+) -> Result<Json<SaleItem>, StatusCode> {
+    let sale = SaleItem {
         id,
+        sale_id: input.sale_id,
         product_id: input.product_id,
         customer_id: input.customer_id,
         date_of_sale: input.date_of_sale,
@@ -931,10 +1178,12 @@ pub async fn update_sale(
         total_cents: input.total_cents,
         total_resolved: input.total_resolved,
         note: input.note,
+        product_name: None,
+        price_per_item: None,
     };
 
     let result = sqlx::query(
-        "UPDATE sales SET product_id = ?, customer_id = ?, date_of_sale = ?, quantity = ?, discount = ?, total_cents = ?, total_resolved = ?, note = ? WHERE id = ?",
+        "UPDATE sale_items SET product_id = ?, customer_id = ?, date_of_sale = ?, quantity = ?, discount = ?, total_cents = ?, total_resolved = ?, note = ?, product_name = (SELECT name FROM products WHERE id = ?), price_per_item = (SELECT price_cents FROM products WHERE id = ?) WHERE id = ?",
     )
     .bind(sale.product_id.to_string())
     .bind(sale.customer_id.to_string())
@@ -944,6 +1193,8 @@ pub async fn update_sale(
     .bind(sale.total_cents)
     .bind(sale.total_resolved)
     .bind(&sale.note)
+    .bind(sale.product_id.to_string())
+    .bind(sale.product_id.to_string())
     .bind(sale.id.to_string())
     .execute(&state.db)
     .await
@@ -952,6 +1203,15 @@ pub async fn update_sale(
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+
+    // Fetch the updated item
+    let row = sqlx::query("SELECT sale_items.id, sale_items.sale_id, sale_items.product_id, sale_items.customer_id, sale_items.date_of_sale, sale_items.quantity, sale_items.discount, sale_items.total_cents, sale_items.total_resolved, sale_items.note, COALESCE(sale_items.product_name, products.name) as product_name, COALESCE(sale_items.price_per_item, products.price_cents) as price_per_item FROM sale_items LEFT JOIN products ON sale_items.product_id = products.id WHERE sale_items.id = ?")
+        .bind(sale.id.to_string())
+        .fetch_one(&state.db)
+        .await
+        .map_err(map_db_err)?;
+    
+    let sale = sale_item_from_row(&row)?;
 
     Ok(Json(sale))
 }
@@ -968,7 +1228,7 @@ pub async fn delete_sale(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("DELETE FROM sales WHERE id = ?")
+    let result = sqlx::query("DELETE FROM sale_items WHERE id = ?")
         .bind(id.to_string())
         .execute(&state.db)
         .await
@@ -1154,6 +1414,45 @@ pub async fn get_staff(
 }
 
 #[utoipa::path(
+    get,
+    path = "/api/staff/{id}/transactions",
+    tag = "Staff Transactions",
+    params(
+        ("id" = String, Path, description = "Staff UUID"),
+        ("start_date" = Option<String>, Query, description = "Start date YYYY-MM-DD"),
+        ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
+    ),
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get staff transactions", body = [Sale]))
+)]
+pub async fn get_staff_transactions(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<StatsRangeParams>,
+) -> Result<Json<Vec<Sale>>, StatusCode> {
+    let (start_date, end_date) = get_default_dates(params.start_date, params.end_date);
+
+    let mut query = "SELECT * FROM sales WHERE staff_responsible = ? AND date(date_and_time) >= date(?) AND date(date_and_time) <= date(?)".to_string();
+    
+    query.push_str(" ORDER BY date_and_time DESC");
+
+    let rows = sqlx::query(&query)
+        .bind(id.to_string())
+        .bind(start_date)
+        .bind(end_date)
+        .fetch_all(&state.db)
+        .await
+        .map_err(map_db_err)?;
+
+    let mut sales = Vec::with_capacity(rows.len());
+    for row in rows {
+        sales.push(sale_from_row(&row)?);
+    }
+
+    Ok(Json(sales))
+}
+
+#[utoipa::path(
     put,
     path = "/api/staff/{id}",
     tag = "Staff",
@@ -1275,9 +1574,16 @@ fn customer_from_row(row: &SqliteRow) -> Result<Customer, StatusCode> {
     })
 }
 
-fn sale_from_row(row: &SqliteRow) -> Result<Sale, StatusCode> {
-    Ok(Sale {
+fn sale_item_from_row(row: &SqliteRow) -> Result<SaleItem, StatusCode> {
+    let sale_id_str: Option<String> = row.get("sale_id");
+    let sale_id = match sale_id_str {
+        Some(s) => Some(parse_uuid(s)?),
+        None => None,
+    };
+
+    Ok(SaleItem {
         id: parse_uuid(row.get("id"))?,
+        sale_id,
         product_id: parse_uuid(row.get("product_id"))?,
         customer_id: parse_uuid(row.get("customer_id"))?,
         date_of_sale: row.get("date_of_sale"),
@@ -1286,6 +1592,34 @@ fn sale_from_row(row: &SqliteRow) -> Result<Sale, StatusCode> {
         total_cents: row.get("total_cents"),
         total_resolved: row.get("total_resolved"),
         note: row.get("note"),
+        product_name: row.try_get("product_name").ok(),
+        price_per_item: row.try_get("price_per_item").ok(),
+    })
+}
+
+fn sale_from_row(row: &SqliteRow) -> Result<Sale, StatusCode> {
+    let sales_channel_str: String = row.get("sales_channel");
+    let sales_channel = shared::models::SalesChannel::from_str(&sales_channel_str).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let customer_id_str: Option<String> = row.get("customer_id");
+    let customer_id = match customer_id_str {
+        Some(s) => Some(parse_uuid(s)?),
+        None => None,
+    };
+
+    Ok(Sale {
+        id: parse_uuid(row.get("id"))?,
+        customer_id,
+        date_and_time: row.get("date_and_time"),
+        sale_items: vec![],
+        total_cents: row.get("total_cents"),
+        discount: row.get("discount"),
+        total_resolved: row.get("total_resolved"),
+        sales_channel,
+        staff_responsible: parse_uuid(row.get("staff_responsible"))?,
+        company_branch: row.get("company_branch"),
+        car_number: row.get("car_number"),
+        receipt_number: row.get("receipt_number"),
     })
 }
 

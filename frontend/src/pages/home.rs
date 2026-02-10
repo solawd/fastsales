@@ -51,7 +51,7 @@ pub fn DashboardPage() -> impl IntoView {
     });
 
     // Helper to format currency
-    let format_currency = |cents: i64| format!("{}{:.2}", CURRENCY, cents as f64 / 100.0);
+    let format_currency = |cents: i64| format!("{} {:.2}", CURRENCY, cents as f64 / 100.0);
 
     view! {
         <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -219,7 +219,7 @@ pub fn DashboardPage() -> impl IntoView {
                                      let val = data[i].total_sales_cents;
                                      view! {
                                         <div style=format!("position: absolute; left: {}%; top: {}%; transform: translate(-50%, -100%); margin-top: -8px; font-size: 0.75rem; font-weight: 600; color: var(--brand-dark); pointer-events: none;", x, y)>
-                                            {format!("{}{}", CURRENCY, val / 100)}
+                                            {format!("{} {}", CURRENCY, val / 100)}
                                         </div>
                                      }
                                 }).collect::<Vec<_>>()}

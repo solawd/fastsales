@@ -1,6 +1,6 @@
 use leptos::*;
-
-use shared::models::{TopProduct, SalesListResponse}; // Ensure these are imported
+use chrono::prelude::*;
+use shared::models::{TopProduct, ProductSalesSummary};
 use crate::utils::CURRENCY;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
@@ -9,50 +9,48 @@ use wasm_bindgen_futures::spawn_local;
 
 #[component]
 pub fn SalesReportsPage() -> impl IntoView {
-    let (start_date, set_start_date) = create_signal(String::new());
-    let (end_date, set_end_date) = create_signal(String::new());
-    // Temporary state for inputs
-    let (input_start_date, set_input_start_date) = create_signal(String::new());
-    let (input_end_date, set_input_end_date) = create_signal(String::new());
+    let now = Local::now();
+    let today_str = now.format("%Y-%m-%d").to_string();
+    let first_day_str = format!("{}-{:02}-01", now.year(), now.month());
+
+    let (start_date, set_start_date) = create_signal(first_day_str.clone());
+    let (end_date, set_end_date) = create_signal(today_str.clone());
+    
+    // Temporary state for inputs, init with defaults
+    let (input_start_date, set_input_start_date) = create_signal(first_day_str);
+    let (input_end_date, set_input_end_date) = create_signal(today_str);
 
     let (top_products, _set_top_products) = create_signal(Vec::<TopProduct>::new());
-    let (sales_response, _set_sales_response) = create_signal(SalesListResponse {
-        sales: vec![],
-        total_sales_period_cents: 0,
-    });
-    let (page, set_page) = create_signal(1i64);
-    let (limit, _set_limit) = create_signal(20i64); // Default 20
+    let (product_sales, _set_product_sales) = create_signal(Vec::<ProductSalesSummary>::new());
+    let (total_period_sales, set_total_period_sales) = create_signal(0i64);
+
     
     // Fetch Data Effect
     create_effect(move |_| {
         let _s_date = start_date.get();
         let _e_date = end_date.get();
-        let _p = page.get();
-        let _l = limit.get();
         
         #[cfg(target_arch = "wasm32")]
         spawn_local(async move {
             let token = web_sys::window().unwrap().local_storage().unwrap().unwrap().get_item("jwt_token").unwrap().unwrap_or_default();
             
-            // Build Query Params
-            let mut query = format!("page={}&limit={}", _p, _l);
-            if !_s_date.is_empty() { query.push_str(&format!("&start_date={}", _s_date)); }
-            if !_e_date.is_empty() { query.push_str(&format!("&end_date={}", _e_date)); }
-            
-            // Fetch Sales List
-            if let Ok(resp) = Request::get(&format!("/api/sales?{}", query))
-                .header("Authorization", &format!("Bearer {}", token))
-                .send().await {
-                 if let Ok(data) = resp.json::<SalesListResponse>().await {
-                     _set_sales_response.set(data);
-                 }
-            }
-            
-            // Fetch Top Products (only depends on date, not page)
+            // Build Query Params for Stats
             let mut stats_query = String::new();
             if !_s_date.is_empty() { stats_query.push_str(&format!("start_date={}&", _s_date)); }
             if !_e_date.is_empty() { stats_query.push_str(&format!("end_date={}", _e_date)); }
             
+            // Fetch Sales By Product
+            if let Ok(resp) = Request::get(&format!("/api/sales/stats/by_product?{}", stats_query))
+                .header("Authorization", &format!("Bearer {}", token))
+                .send().await {
+                 if let Ok(data) = resp.json::<Vec<ProductSalesSummary>>().await {
+                     let total: i64 = data.iter().map(|d| d.total_amount_cents).sum();
+                     set_total_period_sales.set(total);
+                     _set_product_sales.set(data);
+                 }
+            }
+            
+            // Fetch Top Products
             if let Ok(resp) = Request::get(&format!("/api/sales_stats/top_products?{}", stats_query))
                 .header("Authorization", &format!("Bearer {}", token))
                 .send().await {
@@ -63,7 +61,7 @@ pub fn SalesReportsPage() -> impl IntoView {
         });
     });
 
-    let format_currency = |cents: i64| format!("{}{:.2}", CURRENCY, cents as f64 / 100.0);
+    let format_currency = |cents: i64| format!("{} {:.2}", CURRENCY, cents as f64 / 100.0);
 
     view! {
         <div style="display: flex; flex-direction: column; gap: 2rem;">
@@ -95,7 +93,6 @@ pub fn SalesReportsPage() -> impl IntoView {
                             on:click=move |_| {
                                 set_start_date.set(input_start_date.get());
                                 set_end_date.set(input_end_date.get());
-                                set_page.set(1);
                             }
                             style="padding: 0.5rem 1.5rem; background: var(--bg-page); color: var(--text-main); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); font-weight: 600; cursor: pointer;"
                         >
@@ -192,56 +189,37 @@ pub fn SalesReportsPage() -> impl IntoView {
                    <div style="background: var(--bg-surface); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; justify-content: center; align-items: center;">
                         <h3 style="color: var(--text-muted); text-transform: uppercase;">"Total Period Sales"</h3>
                         <div style="font-size: 3.5rem; font-weight: 800; color: var(--brand-dark); margin: 1rem 0;">
-                            {move || format_currency(sales_response.get().total_sales_period_cents)}
+                            {move || format_currency(total_period_sales.get())}
                         </div>
                    </div>
                 </div>
                 
-                // Pane 3: Paginated Table
+                // Pane 3: Product Sales Table
                 <div style="background: var(--bg-surface); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
                     <h3 style="margin-bottom: 1rem;">"Sales Details"</h3>
                     <div style="overflow-x: auto;">
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                             <thead>
                                 <tr style="border-bottom: 2px solid var(--border-subtle); text-align: left;">
-                                    <th style="padding: 0.75rem;">"Date"</th>
-                                    <th style="padding: 0.75rem;">"Qty"</th>
-                                    <th style="padding: 0.75rem;">"Total"</th>
+                                    <th style="padding: 0.75rem;">"Product"</th>
+                                    <th style="padding: 0.75rem;">"Quantity Purchased"</th>
+                                    <th style="padding: 0.75rem;">"Total Amount Generated"</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {move || {
-                                    sales_response.get().sales.into_iter().map(|sale| {
+                                    product_sales.get().into_iter().map(|sale| {
                                         view! {
                                             <tr style="border-bottom: 1px solid var(--border-subtle);">
-                                                <td style="padding: 0.75rem;">{sale.date_of_sale.format("%Y-%m-%d %H:%M").to_string()}</td>
-                                                <td style="padding: 0.75rem;">{sale.quantity}</td>
-                                                <td style="padding: 0.75rem;">{format_currency(sale.total_resolved)}</td>
+                                                <td style="padding: 0.75rem;">{sale.product_name}</td>
+                                                <td style="padding: 0.75rem;">{sale.total_quantity}</td>
+                                                <td style="padding: 0.75rem;">{format_currency(sale.total_amount_cents)}</td>
                                             </tr>
                                         }
                                     }).collect::<Vec<_>>()
                                 }}
                             </tbody>
                         </table>
-                    </div>
-                    
-                    // Pagination
-                    <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem; align-items: center;">
-                        <button 
-                            on:click=move |_| set_page.update(|p| *p = (*p - 1).max(1))
-                            disabled=move || page.get() <= 1
-                            style="padding: 0.5rem 1rem; border: 1px solid var(--border-subtle); background: white; border-radius: var(--radius-md); cursor: pointer;"
-                        >
-                            "Previous"
-                        </button>
-                        <span>"Page " {move || page.get()}</span>
-                         <button 
-                            on:click=move |_| set_page.update(|p| *p = *p + 1)
-                            disabled=move || sales_response.get().sales.len() < limit.get() as usize
-                            style="padding: 0.5rem 1rem; border: 1px solid var(--border-subtle); background: white; border-radius: var(--radius-md); cursor: pointer;"
-                        >
-                            "Next"
-                        </button>
                     </div>
                 </div>
             </div>

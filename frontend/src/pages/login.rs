@@ -33,7 +33,8 @@ pub fn LoginPage() -> impl IntoView {
     #[allow(unused_variables)]
     let _navigate = use_navigate();
 
-    let on_submit = move |_| {
+    let on_submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
         let username = username.get_untracked();
         let password = password.get_untracked();
         let set_error = set_error.clone();
@@ -108,7 +109,7 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <div style=page_style>
-            <div style=centered_box>
+            <form style=centered_box on:submit=on_submit>
                 <div style="text-align: center; margin-bottom: 2rem;">
                     <img src="/fs_logo.png" alt="FastSales Logo" style="height: 80px; width: auto; margin-bottom: 1rem;" />
                     <h1 style="font-family: var(--font-heading); color: var(--brand-dark); font-size: 2.5rem; margin: 0;">"FastSales"</h1>
@@ -133,8 +134,9 @@ pub fn LoginPage() -> impl IntoView {
                     <p style="color: #ef4444; font-size: 0.9rem; margin: 0;">{move || error.get().unwrap_or_default()}</p>
                 </Show>
 
-                <Button on_click=on_submit>"Sign In"</Button>
-            </div>
+                <input type="submit" style="display: none;" />
+                <Button type_="submit">"Sign In"</Button>
+            </form>
         </div>
     }
 }

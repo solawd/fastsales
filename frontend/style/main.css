@@ -108,6 +108,7 @@ input[type="email"],
 input[type="password"],
 input[type="search"],
 input[type="date"],
+input[type="tel"],
 textarea,
 select {
     border: 1px solid var(--border-subtle);
