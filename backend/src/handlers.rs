@@ -50,7 +50,7 @@ pub struct SearchParams {
     path = "/api/products",
     tag = "Products",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List products", body = [Product]))
+    responses((status = 200, description = "List all products with optional search and pagination", body = [Product]))
 )]
 pub async fn list_products(
     State(state): State<AppState>,
@@ -115,7 +115,7 @@ pub async fn list_products(
     tag = "Products",
     request_body = ProductInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Product created", body = Product))
+    responses((status = 201, description = "Create a new product with details", body = Product))
 )]
 pub async fn create_product(
     State(state): State<AppState>,
@@ -176,7 +176,7 @@ pub async fn create_product(
     tag = "Products",
     params(("id" = String, Path, description = "Product id")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get product", body = Product), (status = 404))
+    responses((status = 200, description = "Retrieve a specific product by its unique ID", body = Product), (status = 404))
 )]
 pub async fn get_product(
     State(state): State<AppState>,
@@ -219,7 +219,7 @@ pub async fn get_product(
     params(("id" = String, Path, description = "Product id")),
     request_body = ProductInput,
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Product updated", body = Product), (status = 404))
+    responses((status = 200, description = "Update an existing product's information", body = Product), (status = 404))
 )]
 pub async fn update_product(
     State(state): State<AppState>,
@@ -290,7 +290,7 @@ pub async fn update_product(
     tag = "Products",
     params(("id" = String, Path, description = "Product id")),
     security(("bearer_auth" = [])),
-    responses((status = 204, description = "Product deleted"), (status = 404))
+    responses((status = 204, description = "Permanently remove a product from the system"), (status = 404))
 )]
 pub async fn delete_product(
     State(state): State<AppState>,
@@ -314,7 +314,7 @@ pub async fn delete_product(
     path = "/api/customers",
     tag = "Customers",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List customers", body = [Customer]))
+    responses((status = 200, description = "List all customers with optional search and pagination", body = [Customer]))
 )]
 pub async fn list_customers(
     State(state): State<AppState>,
@@ -382,7 +382,7 @@ pub async fn list_customers(
     tag = "Customers",
     request_body = CustomerInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Customer created", body = Customer), (status = 400))
+    responses((status = 201, description = "Register a new customer", body = Customer), (status = 400))
 )]
 pub async fn create_customer(
     State(state): State<AppState>,
@@ -444,7 +444,7 @@ pub async fn create_customer(
     tag = "Customers",
     params(("id" = String, Path, description = "Customer id")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get customer", body = Customer), (status = 404))
+    responses((status = 200, description = "Retrieve a specific customer's profile", body = Customer), (status = 404))
 )]
 pub async fn get_customer(
     State(state): State<AppState>,
@@ -487,7 +487,7 @@ pub async fn get_customer(
     params(("id" = String, Path, description = "Customer id")),
     request_body = CustomerInput,
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Customer updated", body = Customer), (status = 400), (status = 404))
+    responses((status = 200, description = "Update a customer's profile information", body = Customer), (status = 400), (status = 404))
 )]
 pub async fn update_customer(
     State(state): State<AppState>,
@@ -562,7 +562,7 @@ pub async fn update_customer(
     tag = "Customers",
     params(("id" = String, Path, description = "Customer id")),
     security(("bearer_auth" = [])),
-    responses((status = 204, description = "Customer deleted"), (status = 404))
+    responses((status = 204, description = "Permanently remove a customer"), (status = 404))
 )]
 pub async fn delete_customer(
     State(state): State<AppState>,
@@ -586,7 +586,7 @@ pub async fn delete_customer(
     path = "/api/sales",
     tag = "Sales",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List sales", body = SalesItemsListResponse))
+    responses((status = 200, description = "List individual sale items with filtering by date and pagination", body = SalesItemsListResponse))
 )]
 pub async fn list_sales(
     State(state): State<AppState>,
@@ -652,7 +652,7 @@ pub async fn list_sales(
     tag = "Sales",
     request_body = SaleItemInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Sale created", body = SaleItem))
+    responses((status = 201, description = "Record a single sale item (for legacy or single-item sales)", body = SaleItem))
 )]
 pub async fn create_sale(
     State(state): State<AppState>,
@@ -679,7 +679,7 @@ pub async fn create_sale(
     .bind(sale.id.to_string())
     .bind(sale.sale_id.map(|id| id.to_string()))
     .bind(sale.product_id.to_string())
-    .bind(sale.customer_id.to_string())
+    .bind(sale.customer_id.map(|id| id.to_string()))
     .bind(&sale.date_of_sale)
     .bind(sale.quantity)
     .bind(sale.discount)
@@ -710,7 +710,7 @@ pub async fn create_sale(
     tag = "Sales",
     request_body = SaleInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Sale transaction created", body = Sale))
+    responses((status = 201, description = "Create a new sales transaction containing multiple items", body = Sale))
 )]
 pub async fn create_sales_transaction(
     State(state): State<AppState>,
@@ -772,7 +772,7 @@ pub async fn create_sales_transaction(
         .bind(item.id.to_string())
         .bind(item.sale_id.map(|id| id.to_string()))
         .bind(item.product_id.to_string())
-        .bind(item.customer_id.to_string())
+        .bind(item.customer_id.map(|id| id.to_string()))
         .bind(&item.date_of_sale)
         .bind(item.quantity)
         .bind(item.discount)
@@ -812,7 +812,7 @@ pub async fn create_sales_transaction(
     path = "/api/sales_transactions",
     tag = "Sales",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List sales transactions", body = [Sale]))
+    responses((status = 200, description = "List sales transactions with filtering", body = [Sale]))
 )]
 pub async fn list_sales_transactions(
     State(state): State<AppState>,
@@ -885,7 +885,7 @@ pub async fn list_sales_transactions(
     tag = "Sales",
     params(("id" = String, Path, description = "Sale UUID")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get sales transaction", body = Sale), (status = 404))
+    responses((status = 200, description = "Retrieve a full sales transaction", body = Sale), (status = 404))
 )]
 pub async fn get_sales_transaction(
     State(state): State<AppState>,
@@ -924,7 +924,7 @@ pub async fn get_sales_transaction(
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get sale", body = SaleItem), (status = 404))
+    responses((status = 200, description = "Retrieve a specific sale item", body = SaleItem), (status = 404))
 )]
 pub async fn get_sale(
     State(state): State<AppState>,
@@ -947,7 +947,7 @@ pub async fn get_sale(
     path = "/api/sales/stats/today",
     tag = "Reports",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get today's sales stats", body = SalesStats))
+    responses((status = 200, description = "Get sales statistics for the current day", body = SalesStats))
 )]
 pub async fn get_today_sales(
     State(state): State<AppState>,
@@ -973,7 +973,7 @@ pub async fn get_today_sales(
     path = "/api/sales/stats/week",
     tag = "Reports",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get weekly sales stats (Mon-Sun)", body = [DailySales]))
+    responses((status = 200, description = "Get daily sales statistics for the current week (Mon-Sun)", body = [DailySales]))
 )]
 pub async fn get_weekly_sales_stats(
     State(state): State<AppState>,
@@ -1054,7 +1054,7 @@ pub struct StatsRangeParams {
         ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
     ),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get top products stats", body = [TopProduct]))
+    responses((status = 200, description = "Get a list of top-selling products within a date range", body = [TopProduct]))
 )]
 pub async fn get_top_products(
     State(state): State<AppState>,
@@ -1104,7 +1104,7 @@ pub async fn get_top_products(
     tag = "Reports",
     params(StatsRangeParams),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get sales by product", body = [ProductSalesSummary]))
+    responses((status = 200, description = "Get sales summary grouped by product within a date range", body = [ProductSalesSummary]))
 )]
 pub async fn get_sales_by_product(
     State(state): State<AppState>,
@@ -1160,7 +1160,7 @@ fn get_default_dates(start: Option<String>, end: Option<String>) -> (String, Str
     params(("id" = String, Path, description = "Sale id")),
     request_body = SaleItemInput,
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Sale updated", body = SaleItem), (status = 404))
+    responses((status = 200, description = "Update a specific sale item", body = SaleItem), (status = 404))
 )]
 pub async fn update_sale(
     State(state): State<AppState>,
@@ -1186,7 +1186,7 @@ pub async fn update_sale(
         "UPDATE sale_items SET product_id = ?, customer_id = ?, date_of_sale = ?, quantity = ?, discount = ?, total_cents = ?, total_resolved = ?, note = ?, product_name = (SELECT name FROM products WHERE id = ?), price_per_item = (SELECT price_cents FROM products WHERE id = ?) WHERE id = ?",
     )
     .bind(sale.product_id.to_string())
-    .bind(sale.customer_id.to_string())
+    .bind(sale.customer_id.map(|id| id.to_string()))
     .bind(&sale.date_of_sale)
     .bind(sale.quantity)
     .bind(sale.discount)
@@ -1222,7 +1222,7 @@ pub async fn update_sale(
     tag = "Sales",
     params(("id" = String, Path, description = "Sale id")),
     security(("bearer_auth" = [])),
-    responses((status = 204, description = "Sale deleted"), (status = 404))
+    responses((status = 204, description = "Delete a specific sale item"), (status = 404))
 )]
 pub async fn delete_sale(
     State(state): State<AppState>,
@@ -1269,14 +1269,14 @@ pub struct AuthResponse {
     tag = "Auth",
     request_body = AuthRequest,
     security(()),
-    responses((status = 200, description = "Login success", body = AuthResponse), (status = 401))
+    responses((status = 200, description = "Authenticate a staff member and receive a JWT token", body = AuthResponse), (status = 401))
 )]
 pub async fn login(
     State(state): State<AppState>,
     Json(input): Json<AuthRequest>,
 ) -> Result<Json<AuthResponse>, StatusCode> {
     let row = sqlx::query(
-        "SELECT staff_id, password_hash FROM staff WHERE username = ?",
+        "SELECT id, password_hash FROM staff WHERE username = ?",
     )
     .bind(&input.username)
     .fetch_optional(&state.db)
@@ -1284,7 +1284,7 @@ pub async fn login(
     .map_err(map_db_err)?
     .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let staff_id: String = row.get("staff_id");
+    let staff_uuid: String = row.get("id");
     let password_hash: String = row.get("password_hash");
 
     if !verify_password(&input.password, &state.password_pepper, &password_hash)? {
@@ -1296,7 +1296,8 @@ pub async fn login(
         .duration_since(UNIX_EPOCH)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let claims = Claims {
-        sub: staff_id,
+        sub: staff_uuid,
+
         exp: (now.as_secs() + expires_in) as usize,
     };
     let key = EncodingKey::from_secret(state.jwt_secret.as_bytes());
@@ -1315,15 +1316,15 @@ pub async fn login(
     path = "/api/auth/profile",
     tag = "Auth",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get current user profile", body = Staff))
+    responses((status = 200, description = "Retrieve the profile of the currently authenticated staff member", body = Staff))
 )]
 pub async fn get_profile(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Staff>, StatusCode> {
-    let staff_id = claims.sub;
-    let staff = sqlx::query("SELECT * FROM staff WHERE staff_id = ?")
-        .bind(staff_id)
+    let staff_uuid = claims.sub;
+    let staff = sqlx::query("SELECT * FROM staff WHERE id = ?")
+        .bind(staff_uuid)
         .map(|row: SqliteRow| staff_from_row(&row))
         .fetch_one(&state.db)
         .await
@@ -1336,7 +1337,7 @@ pub async fn get_profile(
     path = "/api/staff",
     tag = "Staff",
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "List staff", body = [Staff]))
+    responses((status = 200, description = "List all staff members", body = [Staff]))
 )]
 pub async fn list_staff(State(state): State<AppState>) -> Result<Json<Vec<Staff>>, StatusCode> {
     let staff = sqlx::query("SELECT * FROM staff")
@@ -1353,7 +1354,7 @@ pub async fn list_staff(State(state): State<AppState>) -> Result<Json<Vec<Staff>
     tag = "Staff",
     request_body = StaffInput,
     security(("bearer_auth" = [])),
-    responses((status = 201, description = "Staff created", body = Staff))
+    responses((status = 201, description = "Register a new staff member", body = Staff))
 )]
 pub async fn create_staff(
     State(state): State<AppState>,
@@ -1397,7 +1398,7 @@ pub async fn create_staff(
     tag = "Staff",
     params(("id" = String, Path, description = "Staff UUID")),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get staff", body = Staff), (status = 404))
+    responses((status = 200, description = "Retrieve a specific staff member's details", body = Staff), (status = 404))
 )]
 pub async fn get_staff(
     State(state): State<AppState>,
@@ -1423,7 +1424,7 @@ pub async fn get_staff(
         ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
     ),
     security(("bearer_auth" = [])),
-    responses((status = 200, description = "Get staff transactions", body = [Sale]))
+    responses((status = 200, description = "Retrieve sales transactions handled by a specific staff member", body = [Sale]))
 )]
 pub async fn get_staff_transactions(
     State(state): State<AppState>,
@@ -1459,7 +1460,7 @@ pub async fn get_staff_transactions(
     params(("id" = String, Path, description = "Staff UUID")),
     security(("bearer_auth" = [])),
     request_body = StaffInput,
-    responses((status = 200, description = "Update staff", body = Staff), (status = 404))
+    responses((status = 200, description = "Update a staff member's information", body = Staff), (status = 404))
 )]
 pub async fn update_staff(
     State(state): State<AppState>,
@@ -1525,7 +1526,7 @@ pub async fn update_staff(
     tag = "Staff",
     params(("id" = String, Path, description = "Staff UUID")),
     security(("bearer_auth" = [])),
-    responses((status = 204, description = "Staff deleted"), (status = 404))
+    responses((status = 204, description = "Permanently remove a staff member"), (status = 404))
 )]
 pub async fn delete_staff(
     State(state): State<AppState>,
@@ -1580,12 +1581,18 @@ fn sale_item_from_row(row: &SqliteRow) -> Result<SaleItem, StatusCode> {
         Some(s) => Some(parse_uuid(s)?),
         None => None,
     };
+    
+    let customer_id_str: Option<String> = row.get("customer_id");
+    let customer_id = match customer_id_str {
+        Some(s) => Some(parse_uuid(s)?),
+        None => None,
+    };
 
     Ok(SaleItem {
         id: parse_uuid(row.get("id"))?,
         sale_id,
         product_id: parse_uuid(row.get("product_id"))?,
-        customer_id: parse_uuid(row.get("customer_id"))?,
+        customer_id,
         date_of_sale: row.get("date_of_sale"),
         quantity: row.get("quantity"),
         discount: row.get("discount"),

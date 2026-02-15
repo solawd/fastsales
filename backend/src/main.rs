@@ -131,6 +131,18 @@ async fn main() {
     let leptos_options = conf.leptos_options;
     let leptos_routes = generate_route_list(frontend::App);
 
+    // Generate and write OpenAPI file
+    #[cfg(debug_assertions)]
+    {
+        use std::io::Write;
+        let doc = ApiDoc::openapi();
+        let json = doc.to_pretty_json().expect("Failed to serialize OpenAPI doc");
+        let path = std::path::Path::new("openapi.json");
+        let mut file = std::fs::File::create(&path).expect("Failed to create openapi.json");
+        file.write_all(json.as_bytes()).expect("Failed to write openapi.json");
+        println!("OpenAPI JSON written to {:?}", path.canonicalize().unwrap_or(path.to_path_buf()));
+    }
+
     let pool = if let Ok(database_url) = env::var("DATABASE_URL") {
         let mut options = SqliteConnectOptions::from_str(&database_url)
             .expect("invalid database url")
@@ -231,3 +243,25 @@ async fn main() {
         .await
         .expect("server failed");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn write_openapi_json() {
+        let doc = ApiDoc::openapi();
+        let json = doc.to_pretty_json().expect("Failed to serialize OpenAPI doc");
+        let mut path = std::env::current_dir().unwrap();
+        path.push(".."); // Go to parent (project root)
+        path.push("openapi.json"); // This might be fastsales/backend/../openapi.json -> fastsales/openapi.json
+        // actually let's just use ".."
+        
+        let path = std::path::Path::new("../openapi.json");
+        let mut file = std::fs::File::create(&path).expect("Failed to create openapi.json");
+        file.write_all(json.as_bytes()).expect("Failed to write openapi.json");
+        println!("OpenAPI JSON written to {:?}", path);
+    }
+}
+
