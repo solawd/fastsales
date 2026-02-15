@@ -355,7 +355,7 @@ pub fn SalesCreatePage() -> impl IntoView {
             SaleItemInput {
                 sale_id: None, // Will be set by backend
                 product_id: Uuid::parse_str(&item.product_id).unwrap_or_default(),
-                customer_id: Uuid::parse_str(&customer_id.get()).unwrap_or_default(), // Items linked to customer too for legacy?
+                customer_id: if customer_id.get().is_empty() { None } else { Uuid::parse_str(&customer_id.get()).ok() }, // Items linked to customer too for legacy?
                 date_of_sale: Utc::now(), // Use transaction time
                 quantity: item.quantity,
                 discount: (item.discount * 100.0) as i64,
@@ -366,7 +366,7 @@ pub fn SalesCreatePage() -> impl IntoView {
         }).collect();
 
         let input = SaleInput {
-            customer_id: if customer_id.get().is_empty() { None } else { Some(Uuid::parse_str(&customer_id.get()).unwrap_or_default()) },
+            customer_id: if customer_id.get().is_empty() { None } else { Uuid::parse_str(&customer_id.get()).ok() },
             date_and_time: Utc::now(),
             sale_items,
             total_cents: (total_val * 100.0) as i64,

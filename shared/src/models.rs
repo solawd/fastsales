@@ -128,7 +128,7 @@ pub struct SaleItem {
     pub id: Uuid,
     pub sale_id: Option<Uuid>, // New field, optional for now to support legacy items? Or should be linking to parent Sale.
     pub product_id: Uuid,
-    pub customer_id: Uuid,
+    pub customer_id: Option<Uuid>,
     pub date_of_sale: DateTime<Utc>,
     pub quantity: i64,
     pub discount: i64,
@@ -153,7 +153,7 @@ impl std::fmt::Display for SaleItem {
 pub struct SaleItemInput {
     pub sale_id: Option<Uuid>,
     pub product_id: Uuid,
-    pub customer_id: Uuid,
+    pub customer_id: Option<Uuid>,
     pub date_of_sale: DateTime<Utc>,
     pub quantity: i64,
     pub discount: i64,
