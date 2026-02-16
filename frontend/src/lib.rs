@@ -13,6 +13,7 @@ use pages::products::{ProductListPage, ProductEditPage};
 use pages::sales::{SalesListPage, SalesCreatePage, SalesDetailPage};
 use pages::customers::{CustomersListPage, CustomerEditPage};
 use pages::staff::{StaffListPage, StaffEditPage};
+use pages::staff_sales::StaffSalesPage;
 use pages::profile::ProfilePage;
 use pages::reports::SalesReportsPage;
 
@@ -44,6 +45,7 @@ pub fn App() -> impl IntoView {
                         <Route path="/staff" view=StaffListPage/>
                         <Route path="/staff/create" view=StaffEditPage/>
                         <Route path="/staff/:id" view=StaffEditPage/>
+                        <Route path="/staff/:id/sales" view=StaffSalesPage/>
                     </Route>
                 </Routes>
             </main>

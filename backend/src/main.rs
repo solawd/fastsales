@@ -24,7 +24,7 @@ use handlers::{
     list_products, list_sales, list_staff, update_customer, update_product, update_sale,
     update_staff, login, upload_file, get_profile, get_today_sales, get_weekly_sales_stats,
     get_top_products, create_sales_transaction, list_sales_transactions, get_sales_transaction,
-    get_sales_by_product, get_staff_transactions,
+    get_sales_by_product, get_staff_transactions, get_sales_summary_by_staff,
 };
 use auth::auth_middleware;
 use sqlx::SqlitePool;
@@ -60,6 +60,7 @@ use sqlx::SqlitePool;
         handlers::get_weekly_sales_stats,
         handlers::get_top_products,
         handlers::get_sales_by_product,
+        handlers::get_sales_summary_by_staff,
         handlers::get_staff_transactions
     ),
     components(schemas(
@@ -81,6 +82,7 @@ use sqlx::SqlitePool;
         shared::models::DailySales,
         shared::models::TopProduct,
         shared::models::ProductSalesSummary,
+        shared::models::StaffSalesSummary,
         handlers::AuthRequest,
         handlers::AuthResponse
     )),
@@ -206,6 +208,7 @@ async fn main() {
         .route("/sales/stats/week", get(get_weekly_sales_stats))
         .route("/sales_stats/top_products", get(get_top_products))
         .route("/sales/stats/by_product", get(get_sales_by_product))
+        .route("/sales/stats/by_staff", get(get_sales_summary_by_staff))
         .route(
             "/sales/:id",
             get(get_sale).put(update_sale).delete(delete_sale),

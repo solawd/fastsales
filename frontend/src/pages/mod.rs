@@ -6,3 +6,4 @@ pub mod customers;
 pub mod staff;
 pub mod profile;
 pub mod reports;
+pub mod staff_sales;

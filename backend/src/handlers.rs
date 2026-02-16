@@ -26,7 +26,7 @@ use crate::auth::Claims;
 use shared::models::{
     Customer, CustomerInput, CustomerDetails, Product, ProductDetails, ProductInput, ProductType,
     SaleItem, SaleItemInput, Staff, StaffInput, UploadResponse, SalesStats, DailySales, SalesItemsListResponse,
-    TopProduct, Sale, SaleInput, ProductSalesSummary,
+    TopProduct, Sale, SaleInput, ProductSalesSummary, StaffSalesSummary,
 };
 
 #[derive(Deserialize)]
@@ -36,6 +36,7 @@ pub struct SalesSearchParams {
     pub page: Option<i64>,
     pub limit: Option<i64>,
     pub query: Option<String>,
+    pub staff_id: Option<Uuid>,
 }
 
 
@@ -1421,7 +1422,9 @@ pub async fn get_staff(
     params(
         ("id" = String, Path, description = "Staff UUID"),
         ("start_date" = Option<String>, Query, description = "Start date YYYY-MM-DD"),
-        ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD")
+        ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD"),
+        ("page" = Option<i64>, Query, description = "Page number"),
+        ("limit" = Option<i64>, Query, description = "Items per page")
     ),
     security(("bearer_auth" = [])),
     responses((status = 200, description = "Retrieve sales transactions handled by a specific staff member", body = [Sale]))
@@ -1429,18 +1432,42 @@ pub async fn get_staff(
 pub async fn get_staff_transactions(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(params): Query<StatsRangeParams>,
+    Query(params): Query<SalesSearchParams>,
 ) -> Result<Json<Vec<Sale>>, StatusCode> {
-    let (start_date, end_date) = get_default_dates(params.start_date, params.end_date);
+    let mut query = "SELECT * FROM sales WHERE staff_responsible = ?".to_string();
+    let mut args = Vec::new();
+    args.push(id.to_string());
 
-    let mut query = "SELECT * FROM sales WHERE staff_responsible = ? AND date(date_and_time) >= date(?) AND date(date_and_time) <= date(?)".to_string();
+    if let Some(start) = &params.start_date {
+        if !start.is_empty() {
+             query.push_str(" AND date(date_and_time) >= date(?)");
+             args.push(start.clone());
+        }
+    }
+    
+    if let Some(end) = &params.end_date {
+        if !end.is_empty() {
+             query.push_str(" AND date(date_and_time) <= date(?)");
+             args.push(end.clone());
+        }
+    }
     
     query.push_str(" ORDER BY date_and_time DESC");
 
-    let rows = sqlx::query(&query)
-        .bind(id.to_string())
-        .bind(start_date)
-        .bind(end_date)
+    // Pagination
+    let limit = params.limit.unwrap_or(20);
+    let page = params.page.unwrap_or(1);
+    let offset = (page - 1) * limit;
+
+    query.push_str(" LIMIT ? OFFSET ?");
+    
+    let mut sql_query = sqlx::query(&query);
+    for arg in &args {
+        sql_query = sql_query.bind(arg);
+    }
+    sql_query = sql_query.bind(limit).bind(offset);
+
+    let rows = sql_query
         .fetch_all(&state.db)
         .await
         .map_err(map_db_err)?;
@@ -1707,4 +1734,66 @@ pub async fn upload_file(mut multipart: axum::extract::Multipart) -> Result<Json
         }
     }
     Err(StatusCode::BAD_REQUEST)
+}
+#[utoipa::path(
+    get,
+    path = "/api/sales/stats/by_staff",
+    tag = "Reports",
+    params(
+        ("start_date" = Option<String>, Query, description = "Start date YYYY-MM-DD"),
+        ("end_date" = Option<String>, Query, description = "End date YYYY-MM-DD"),
+        ("staff_id" = Option<String>, Query, description = "Filter by specific Staff UUID")
+    ),
+    security(("bearer_auth" = [])),
+    responses((status = 200, description = "Get sales summary grouped by staff within a date range", body = [StaffSalesSummary]))
+)]
+pub async fn get_sales_summary_by_staff(
+    State(state): State<AppState>,
+    Query(params): Query<SalesSearchParams>,
+) -> Result<Json<Vec<shared::models::StaffSalesSummary>>, StatusCode> {
+    let (start_date, end_date) = get_default_dates(params.start_date, params.end_date);
+
+    let mut query = "SELECT 
+            s.staff_responsible, 
+            st.first_name, 
+            st.last_name,
+            COUNT(s.id) as transaction_count, 
+            SUM(s.total_cents) as total_sales_cents
+         FROM sales s
+         LEFT JOIN staff st ON s.staff_responsible = st.id
+         WHERE date(s.date_and_time) >= date(?) AND date(s.date_and_time) <= date(?)".to_string();
+    
+    let mut args = Vec::new();
+    args.push(start_date);
+    args.push(end_date);
+
+    if let Some(sid) = params.staff_id {
+        query.push_str(" AND s.staff_responsible = ?");
+        args.push(sid.to_string());
+    }
+
+    query.push_str(" GROUP BY s.staff_responsible");
+
+    let mut sql_query = sqlx::query(&query);
+    for arg in args {
+        sql_query = sql_query.bind(arg);
+    }
+
+    let rows = sql_query
+    .fetch_all(&state.db)
+    .await
+    .map_err(map_db_err)?;
+
+    let summary: Vec<shared::models::StaffSalesSummary> = rows.into_iter().map(|row| {
+        let first_name: String = row.get("first_name");
+        let last_name: String = row.get("last_name");
+        shared::models::StaffSalesSummary {
+            staff_id: parse_uuid(row.get("staff_responsible")).unwrap_or_default(),
+            staff_name: format!("{} {}", first_name, last_name),
+            total_sales_cents: row.try_get("total_sales_cents").unwrap_or(0),
+            transaction_count: row.try_get("transaction_count").unwrap_or(0),
+        }
+    }).collect();
+
+    Ok(Json(summary))
 }

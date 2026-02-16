@@ -289,3 +289,11 @@ pub struct ProductSalesSummary {
     pub total_quantity: i64,
     pub total_amount_cents: i64,
 }
+
+#[derive(Serialize, Deserialize, ToSchema, Debug)]
+pub struct StaffSalesSummary {
+    pub staff_id: Uuid,
+    pub staff_name: String,
+    pub total_sales_cents: i64,
+    pub transaction_count: i64,
+}

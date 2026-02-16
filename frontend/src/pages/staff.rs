@@ -98,7 +98,8 @@ pub fn StaffListPage() -> impl IntoView {
                                         <td style="padding: 1rem;">{staff.username}</td>
                                         <td style="padding: 1rem;">"Staff"</td>
                                         <td style="padding: 1rem; display: flex; gap: 0.5rem;">
-                                            <A href=format!("/staff/{}", staff.id) attr:style="text-decoration: none; color: var(--brand-primary); font-weight: 600;">"Edit"</A>
+                                            <A href=format!("/staff/{}/sales", staff.id) attr:style="text-decoration: none; color: var(--brand-primary); font-weight: 600;">"View Sales"</A>
+                                            <A href=format!("/staff/{}", staff.id) attr:style="text-decoration: none; color: var(--text-body); font-weight: 500;">"Edit"</A>
                                             <button 
                                                 on:click=move |_| delete_action(staff.id.to_string())
                                                 style="background: none; border: none; color: var(--state-error); cursor: pointer; font-weight: 500;"
