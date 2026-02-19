@@ -44,12 +44,19 @@ pub struct SalesSearchParams {
 #[derive(Deserialize)]
 pub struct SearchParams {
     pub search: Option<String>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
 }
 
 #[utoipa::path(
     get,
     path = "/api/products",
     tag = "Products",
+    params(
+        ("search" = Option<String>, Query, description = "Search term"),
+        ("page" = Option<i64>, Query, description = "Page number"),
+        ("limit" = Option<i64>, Query, description = "Items per page")
+    ),
     security(("bearer_auth" = [])),
     responses((status = 200, description = "List all products with optional search and pagination", body = [Product]))
 )]
@@ -57,6 +64,10 @@ pub async fn list_products(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<Vec<Product>>, StatusCode> {
+    let limit = params.limit.unwrap_or(20);
+    let page = params.page.unwrap_or(1);
+    let offset = (page - 1) * limit;
+
     let rows = if let Some(search) = params.search {
         let pattern = format!("%{}%", search);
         sqlx::query(
@@ -68,17 +79,22 @@ pub async fn list_products(
                     SELECT 1 FROM product_details 
                     WHERE product_details.product_id = products.id 
                     AND (detail_name LIKE ? OR detail_value LIKE ?)
-                )"
+                )
+             LIMIT ? OFFSET ?"
         )
         .bind(&pattern)
         .bind(&pattern)
         .bind(&pattern)
         .bind(&pattern)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&state.db)
         .await
         .map_err(map_db_err)?
     } else {
-        sqlx::query("SELECT id, name, description, price_cents, stock, product_type FROM products")
+        sqlx::query("SELECT id, name, description, price_cents, stock, product_type FROM products LIMIT ? OFFSET ?")
+            .bind(limit)
+            .bind(offset)
             .fetch_all(&state.db)
             .await
             .map_err(map_db_err)?
@@ -785,6 +801,23 @@ pub async fn create_sales_transaction(
         .execute(&mut *tx)
         .await
         .map_err(map_db_err)?;
+
+        // Check product type and reduce stock if physical good
+        let product_type_str: String = sqlx::query("SELECT product_type FROM products WHERE id = ?")
+            .bind(item.product_id.to_string())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_db_err)?
+            .get("product_type");
+
+        if let Ok(ProductType::PhysicalGood) = ProductType::from_str(&product_type_str) {
+             sqlx::query("UPDATE products SET stock = stock - ? WHERE id = ?")
+                .bind(item.quantity)
+                .bind(item.product_id.to_string())
+                .execute(&mut *tx)
+                .await
+                .map_err(map_db_err)?;
+        }
     }
 
     // Re-fetch items to get product_names and price_per_item

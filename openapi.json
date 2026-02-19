@@ -1,0 +1,1932 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "backend",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticate a staff member and receive a JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/customers": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "operationId": "list_customers",
+        "responses": {
+          "200": {
+            "description": "List all customers with optional search and pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Customer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "operationId": "create_customer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Register a new customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/customers/{id}": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "operationId": "get_customer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Customer id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a specific customer's profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "operationId": "update_customer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Customer id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Update a customer's profile information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Customers"
+        ],
+        "operationId": "delete_customer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Customer id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Permanently remove a customer"
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/products": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "list_products",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search term",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Items per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List all products with optional search and pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "create_product",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Create a new product with details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/products/{id}": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "get_product",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Product id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a specific product by its unique ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "update_product",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Product id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Update an existing product's information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "delete_product",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Product id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Permanently remove a product from the system"
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales": {
+      "get": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "list_sales",
+        "responses": {
+          "200": {
+            "description": "List individual sale items with filtering by date and pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesItemsListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "create_sale",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleItemInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Record a single sale item (for legacy or single-item sales)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleItem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/stats/by_product": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "get_sales_by_product",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get sales summary grouped by product within a date range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductSalesSummary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/stats/by_staff": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "get_sales_summary_by_staff",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Start date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "End date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "staff_id",
+            "in": "query",
+            "description": "Filter by specific Staff UUID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get sales summary grouped by staff within a date range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StaffSalesSummary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/stats/today": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "get_today_sales",
+        "responses": {
+          "200": {
+            "description": "Get sales statistics for the current day",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesStats"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/stats/top_products": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "get_top_products",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Start date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "End date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get a list of top-selling products within a date range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TopProduct"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/stats/week": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "get_weekly_sales_stats",
+        "responses": {
+          "200": {
+            "description": "Get daily sales statistics for the current week (Mon-Sun)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DailySales"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales/{id}": {
+      "get": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "get_sale",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Sale id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a specific sale item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "update_sale",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Sale id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleItemInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Update a specific sale item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "delete_sale",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Sale id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete a specific sale item"
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales_transactions": {
+      "get": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "list_sales_transactions",
+        "responses": {
+          "200": {
+            "description": "List sales transactions with filtering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Sale"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "create_sales_transaction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Create a new sales transaction containing multiple items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sale"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/sales_transactions/{id}": {
+      "get": {
+        "tags": [
+          "Sales"
+        ],
+        "operationId": "get_sales_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Sale UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a full sales transaction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sale"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/staff": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "list_staff",
+        "responses": {
+          "200": {
+            "description": "List all staff members",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Staff"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "create_staff",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Register a new staff member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/staff/{id}": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "get_staff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Staff UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a specific staff member's details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "update_staff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Staff UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Update a staff member's information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "delete_staff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Staff UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Permanently remove a staff member"
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/staff/{id}/transactions": {
+      "get": {
+        "tags": [
+          "Staff Transactions"
+        ],
+        "operationId": "get_staff_transactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Staff UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Start date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "End date YYYY-MM-DD",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Items per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve sales transactions handled by a specific staff member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Sale"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "token_type",
+          "expires_in"
+        ],
+        "properties": {
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "mobile_number",
+          "date_of_birth",
+          "email",
+          "details"
+        ],
+        "properties": {
+          "date_of_birth": {
+            "type": "string",
+            "format": "date"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerDetails"
+            }
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "middle_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mobile_number": {
+            "type": "string"
+          }
+        }
+      },
+      "CustomerInput": {
+        "type": "object",
+        "required": [
+          "first_name",
+          "last_name",
+          "mobile_number",
+          "date_of_birth",
+          "email",
+          "details"
+        ],
+        "properties": {
+          "date_of_birth": {
+            "type": "string",
+            "format": "date"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerDetailsInput"
+            }
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "middle_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mobile_number": {
+            "type": "string"
+          }
+        }
+      },
+      "DailySales": {
+        "type": "object",
+        "required": [
+          "date",
+          "total_sales_cents",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "date": {
+            "type": "string"
+          },
+          "total_sales_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "price_cents",
+          "stock",
+          "product_type",
+          "details"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDetails"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "product_type": {
+            "$ref": "#/components/schemas/ProductType"
+          },
+          "stock": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProductDetails": {
+        "type": "object",
+        "required": [
+          "product_id",
+          "detail_name",
+          "detail_value"
+        ],
+        "properties": {
+          "detail_name": {
+            "type": "string"
+          },
+          "detail_value": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ProductDetailsInput": {
+        "type": "object",
+        "required": [
+          "detail_name",
+          "detail_value"
+        ],
+        "properties": {
+          "detail_name": {
+            "type": "string"
+          },
+          "detail_value": {
+            "type": "string"
+          }
+        }
+      },
+      "ProductInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "price_cents",
+          "stock",
+          "product_type",
+          "details"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDetailsInput"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "product_type": {
+            "$ref": "#/components/schemas/ProductType"
+          },
+          "stock": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProductSalesSummary": {
+        "type": "object",
+        "required": [
+          "product_name",
+          "total_quantity",
+          "total_amount_cents"
+        ],
+        "properties": {
+          "product_name": {
+            "type": "string"
+          },
+          "total_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_quantity": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProductType": {
+        "type": "string",
+        "enum": [
+          "physical_good",
+          "service"
+        ]
+      },
+      "Sale": {
+        "type": "object",
+        "required": [
+          "id",
+          "date_and_time",
+          "sale_items",
+          "total_cents",
+          "discount",
+          "total_resolved",
+          "sales_channel",
+          "staff_responsible",
+          "company_branch",
+          "car_number",
+          "receipt_number"
+        ],
+        "properties": {
+          "car_number": {
+            "type": "string"
+          },
+          "company_branch": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "date_and_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "discount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receipt_number": {
+            "type": "string"
+          },
+          "sale_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaleItem"
+            }
+          },
+          "sales_channel": {
+            "$ref": "#/components/schemas/SalesChannel"
+          },
+          "staff_responsible": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_resolved": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SaleInput": {
+        "type": "object",
+        "required": [
+          "date_and_time",
+          "sale_items",
+          "total_cents",
+          "discount",
+          "total_resolved",
+          "sales_channel",
+          "staff_responsible",
+          "company_branch",
+          "car_number",
+          "receipt_number"
+        ],
+        "properties": {
+          "car_number": {
+            "type": "string"
+          },
+          "company_branch": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "date_and_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "discount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "receipt_number": {
+            "type": "string"
+          },
+          "sale_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaleItemInput"
+            }
+          },
+          "sales_channel": {
+            "$ref": "#/components/schemas/SalesChannel"
+          },
+          "staff_responsible": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_resolved": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SaleItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "date_of_sale",
+          "quantity",
+          "discount",
+          "total_cents",
+          "total_resolved"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "date_of_sale": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "discount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price_per_item": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "product_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sale_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_resolved": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SaleItemInput": {
+        "type": "object",
+        "required": [
+          "product_id",
+          "date_of_sale",
+          "quantity",
+          "discount",
+          "total_cents",
+          "total_resolved"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "date_of_sale": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "discount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sale_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "total_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_resolved": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SalesChannel": {
+        "type": "string",
+        "enum": [
+          "mobile",
+          "web"
+        ]
+      },
+      "SalesItemsListResponse": {
+        "type": "object",
+        "required": [
+          "sales",
+          "total_sales_period_cents"
+        ],
+        "properties": {
+          "sales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaleItem"
+            }
+          },
+          "total_sales_period_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SalesStats": {
+        "type": "object",
+        "required": [
+          "total_sales_cents",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_sales_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Staff": {
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "mobile_number",
+          "photo_link",
+          "staff_id",
+          "username",
+          "password_hash"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "mobile_number": {
+            "type": "string"
+          },
+          "password_hash": {
+            "type": "string"
+          },
+          "photo_link": {
+            "type": "string"
+          },
+          "staff_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "StaffInput": {
+        "type": "object",
+        "required": [
+          "first_name",
+          "last_name",
+          "mobile_number",
+          "photo_link",
+          "staff_id",
+          "username"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "mobile_number": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo_link": {
+            "type": "string"
+          },
+          "staff_id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "StaffSalesSummary": {
+        "type": "object",
+        "required": [
+          "staff_id",
+          "staff_name",
+          "total_sales_cents",
+          "transaction_count"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "staff_name": {
+            "type": "string"
+          },
+          "total_sales_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transaction_count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TopProduct": {
+        "type": "object",
+        "required": [
+          "product_name",
+          "total_sales_cents"
+        ],
+        "properties": {
+          "product_name": {
+            "type": "string"
+          },
+          "total_sales_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Products",
+      "description": "Product CRUD"
+    },
+    {
+      "name": "Customers",
+      "description": "Customer CRUD"
+    },
+    {
+      "name": "Sales",
+      "description": "Sales CRUD"
+    },
+    {
+      "name": "Reports",
+      "description": "Sales Reports & Statistics"
+    },
+    {
+      "name": "Staff Transactions",
+      "description": "Transactions by Staff"
+    },
+    {
+      "name": "Staff",
+      "description": "Staff CRUD"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication"
+    }
+  ]
+}
